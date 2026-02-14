@@ -3,6 +3,8 @@ import { AntDesign } from '@expo/vector-icons';
 import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { savePhotoToScimFolder } from '@/components/fileSystem';
+
 
 export default function Camera() {
   const [facing, setFacing] = useState<CameraType>('back');
@@ -29,18 +31,23 @@ export default function Camera() {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   }
 
-  const handleTakePhoto =  async () => {
-    if (cameraRef.current) {
-        const options = {
-            quality: 1,
-            base64: true,
-            exif: false,
-        };
-        const takePhoto = await cameraRef.current.takePictureAsync(options);
+const handleTakePhoto = async () => {
+  if (!cameraRef.current) return;
 
-        setPhoto(takePhoto);
-    }
-  }; 
+  const photoData = await cameraRef.current.takePictureAsync({
+    quality: 1,
+    base64: false,
+    exif: false,
+  });
+
+  if (!photoData?.uri) return;
+
+  // Save to SCIM folder
+  const savedFile = await savePhotoToScimFolder(photoData.uri);
+
+  // Update state with new URI
+  setPhoto({ ...photoData, uri: savedFile.uri });
+};
 
   const handleRetakePhoto = () => setPhoto(null);
 
