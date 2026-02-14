@@ -36,9 +36,9 @@ export default function Camera() {
             base64: true,
             exif: false,
         };
-        const takedPhoto = await cameraRef.current.takePictureAsync(options);
+        const takePhoto = await cameraRef.current.takePictureAsync(options);
 
-        setPhoto(takedPhoto);
+        setPhoto(takePhoto);
     }
   }; 
 
