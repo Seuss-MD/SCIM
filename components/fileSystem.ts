@@ -1,4 +1,4 @@
-// utils/fileSystem.ts
+// components/fileSystem.ts
 import { Directory, File, Paths } from 'expo-file-system';
 
 /**
@@ -25,7 +25,7 @@ export async function savePhotoToScimFolder(tempUri: string): Promise<File> {
 
   // Copy contents from temp URI
   const tempFile = new File(tempUri);
-  await photoFile.write(await tempFile.bytes());
+  await tempFile.copy(photoFile);
 
   return photoFile;
 }
