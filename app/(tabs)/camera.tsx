@@ -5,6 +5,7 @@ import { CameraType, CameraView, useCameraPermissions } from 'expo-camera';
 import { useRef, useState } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
+import { insertItem } from '@/components/database';
 
 
 export default function Camera() {
@@ -22,7 +23,7 @@ export default function Camera() {
   if (!permission.granted) {
     // Camera permissions are not granted yet.
     return (
-      <View style={styles.container}>
+      <View style={styles.permissionContainer}>
         <Text style={{ textAlign: 'center' }}>We need your permission to show the camera</Text>
         <Button onPress={requestPermission} title="grant permission" />
       </View>
@@ -55,7 +56,10 @@ const handleSavePhoto = async () => {
   try {
     const savedFile = await savePhotoToScimFolder(photo.uri);
     console.log('Saved to:', savedFile.uri);
+
+    insertItem('Photo', savedFile.uri, null);
     setPhoto(null);
+
   } catch (error) {
     console.error('Save failed:', error);
   }
@@ -99,6 +103,14 @@ const styles = StyleSheet.create({
 
   camera: {
     flex: 1,
+  },
+  permissionContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    marginHorizontal: 20,
+   
   },
 
   controls: {
