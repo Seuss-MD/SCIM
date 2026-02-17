@@ -4,6 +4,21 @@ import * as SQLite from 'expo-sqlite';
 
 const db = SQLite.openDatabaseSync('scim.db');
 
+export type Container = {
+  id: number;
+  name: string;
+};
+
+export type Item = {
+  id: number;
+  name: string;
+  image_uri: string;
+  container_id: number | null;
+  created_at: string;
+};
+
+
+
 /**
  * Initialize database tables
  */
@@ -11,7 +26,9 @@ export function initDatabase() {
   db.execSync(`
     CREATE TABLE IF NOT EXISTS containers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      image_uri TEXT NOT NULL
+      
     );
 
     CREATE TABLE IF NOT EXISTS items (
@@ -49,12 +66,13 @@ export function getAllItems() {
 /**
  * Get items by container
  */
-export function getItemsByContainer(containerId: number) {
+export function getItemsByContainer(containerId: number): Item[] {
   return db.getAllSync(
     `SELECT * FROM items WHERE container_id = ?`,
     [containerId]
-  );
+  ) as Item[];
 }
+
 
 /**
  * Insert a new container
@@ -74,3 +92,11 @@ export function getAllContainers() {
   );
 
 }
+
+export function getContainerById(id: number): Container | null {
+  return db.getFirstSync(
+    `SELECT * FROM containers WHERE id = ?`,
+    [id]
+  ) as Container | null;
+}
+
