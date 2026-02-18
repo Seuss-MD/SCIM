@@ -15,6 +15,11 @@ export default function Camera() {
 
   const cameraRef = useRef<CameraView | null>(null);
 
+    // Fake embedding (128 dimensions)
+  const generateFakeEmbedding = () => {
+    return Array.from({ length: 128 }, () => Math.random());
+  };
+
   if (!permission) {
     // Camera permissions are still loading.
     return <View />;
@@ -56,8 +61,10 @@ const handleSavePhoto = async () => {
   try {
     const savedFile = await savePhotoToScimFolder(photo.uri);
     console.log('Saved to:', savedFile.uri);
+    const embedding = generateFakeEmbedding();
 
-    insertItem('Photo', savedFile.uri, null);
+
+    insertItem('Photo', savedFile.uri, null, embedding);
     setPhoto(null);
 
   } catch (error) {

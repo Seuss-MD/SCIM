@@ -1,67 +1,103 @@
+//storage.tsx
 import { useState, useCallback } from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View, Image, FlatList, Dimensions, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-
-import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-import { getAllContainers } from '@/components/database';
+import { getAllContainers, deleteContainer } from '@/components/database';
 
 export default function StorageScreen() {
   const router = useRouter();
   const [containers, setContainers] = useState<any[]>([]);
+  const numColumns = 2;
+  const screenWidth = Dimensions.get('window').width;
+  const imageSize = (screenWidth - 32 - 12) / numColumns;
 
   const loadContainers = () => {
     const data = getAllContainers();
     setContainers(data);
   };
 
-  // 🔥 This reloads every time screen comes back into focus
+  // This reloads every time screen comes back into focus
   useFocusEffect(
     useCallback(() => {
       loadContainers();
     }, [])
   );
+  const handleDelete = (id: number) => {
+    Alert.alert(
+      'Delete Container',
+      'Are you sure you want to delete this container?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteContainer(id);
+            loadContainers(); // refresh list
+          },
+        },
+      ]
+    );
+  };
+
 
   return (
-    <ParallaxScrollView
-      headerTitle="Containers"
+    <ThemedView 
+      style={{ flex: 1 }}
+      >
+      <FlatList
+        data={containers}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={numColumns}
+        contentContainerStyle={styles.listContent}
+        columnWrapperStyle={{ justifyContent: 'space-between' }}
 
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-    >
-      <ThemedView style={styles.container}>
-
-        <TouchableOpacity
-          style={styles.createButton}
-          activeOpacity={0.8}
-          onPress={() => router.push('/container/create')}
-        >
-          <View style={styles.buttonContent}>
-            <ThemedText style={styles.plus}>＋</ThemedText>
-            <ThemedText style={styles.buttonText}>
-              Create Container
+        ListHeaderComponent={
+          <View style={{ marginBottom: 20 }}>
+            
+            <ThemedText style={styles.title}>
+              Containers
             </ThemedText>
+
+            <TouchableOpacity
+              style={styles.createButton}
+              activeOpacity={0.8}
+              onPress={() => router.push('/container/create')}
+            >
+              <View style={styles.buttonContent}>
+                <ThemedText style={styles.plus}>＋</ThemedText>
+                <ThemedText style={styles.buttonText}>
+                  Create Container
+                </ThemedText>
+              </View>
+            </TouchableOpacity>
+
           </View>
-        </TouchableOpacity>
+        }
 
-        <ThemedText type="subtitle" style={{ marginTop: 20 }}>
-          Existing Containers:
-        </ThemedText>
-
-        {containers.map((container) => (
-          <ThemedText
-            key={container.id}
-            style={{ fontSize: 18 }}
-            onPress={() =>
-              router.push(`/container/${container.id}`)
-            }
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.imageWrapper}
+            onPress={() => router.push(`/container/${item.id}`)}
+            onLongPress={() => handleDelete(item.id)}   // ✅ ADD THIS
+            delayLongPress={400}
+            activeOpacity={0.8}
           >
-            📁 {container.name}
-          </ThemedText>
-        ))}
-      </ThemedView>
-    </ParallaxScrollView>
+            <Image
+              source={{ uri: item.image_uri }}
+              style={[
+                styles.image,
+                { width: imageSize, height: imageSize }
+              ]}
+            />
+
+          </TouchableOpacity>
+        )}
+      />
+    </ThemedView>
   );
 }
 
@@ -70,6 +106,14 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  title: {
+    paddingTop: 30,
+    fontSize: 56,
+    fontWeight: '700',
+    marginBottom: 20,
+    lineHeight: 64,
+  },
+
   createButton: {
     backgroundColor: '#4F46E5', 
     paddingVertical: 14,
@@ -100,5 +144,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  imageWrapper: {
+    marginBottom: 12,
+  },
+
+image: {
+  borderRadius: 12,
+  backgroundColor: '#eee',
+},
+
+
+  listContent: {
+    padding: 16,
+  },
+
 
 });
