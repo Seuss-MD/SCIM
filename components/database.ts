@@ -69,6 +69,13 @@ export function insertItem(
   );
 }
 
+export function deleteItem(id: number) {
+  db.runSync(
+    `DELETE FROM items WHERE id = ?`,
+    [id]
+  );
+}
+
 /**
  * Get all items
  */
@@ -86,6 +93,12 @@ export function getItemsByContainer(containerId: number): Item[] {
   ) as Item[];
 }
 
+export function getItemById(id: number): Item | null {
+  return db.getFirstSync(
+    `SELECT * FROM items WHERE id = ?`,
+    [id]
+  ) as Item | null;
+}
 
 /**
  * Insert a new container

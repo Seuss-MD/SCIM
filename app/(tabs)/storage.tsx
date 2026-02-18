@@ -12,7 +12,9 @@ export default function StorageScreen() {
   const [containers, setContainers] = useState<any[]>([]);
   const numColumns = 2;
   const screenWidth = Dimensions.get('window').width;
-  const imageSize = (screenWidth - 32 - 12) / numColumns;
+  const spacing = 16;
+  const imageSize =
+    (screenWidth - spacing * (numColumns + 1)) / numColumns;
 
   const loadContainers = () => {
     const data = getAllContainers();
@@ -53,7 +55,8 @@ export default function StorageScreen() {
         keyExtractor={(item) => item.id.toString()}
         numColumns={numColumns}
         contentContainerStyle={styles.listContent}
-        columnWrapperStyle={{ justifyContent: 'space-between' }}
+        columnWrapperStyle={{ gap: spacing }}
+
 
         ListHeaderComponent={
           <View style={{ marginBottom: 20 }}>
@@ -82,7 +85,7 @@ export default function StorageScreen() {
           <TouchableOpacity
             style={styles.imageWrapper}
             onPress={() => router.push(`/container/${item.id}`)}
-            onLongPress={() => handleDelete(item.id)}   // ✅ ADD THIS
+            onLongPress={() => handleDelete(item.id)}  
             delayLongPress={400}
             activeOpacity={0.8}
           >
@@ -145,13 +148,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   imageWrapper: {
-    marginBottom: 12,
+    marginBottom: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
 
-image: {
-  borderRadius: 12,
-  backgroundColor: '#eee',
-},
+
+  image: {
+    borderRadius: 14,
+    backgroundColor: '#eee',
+  },
 
 
   listContent: {
