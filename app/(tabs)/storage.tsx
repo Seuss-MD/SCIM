@@ -5,7 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-import { getAllContainers, deleteContainer } from '@/components/database';
+import { getAllContainers, deleteContainer, consoleAllData } from '@/components/database';
 
 export default function StorageScreen() {
   const router = useRouter();
@@ -19,6 +19,8 @@ export default function StorageScreen() {
   const loadContainers = () => {
     const data = getAllContainers();
     setContainers(data);
+    consoleAllData();
+
   };
 
   // This reloads every time screen comes back into focus

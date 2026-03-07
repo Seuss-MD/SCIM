@@ -6,6 +6,9 @@ import { useRef, useState } from 'react';
 import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { insertItem } from '@/components/database';
+import { uploadItemImageAndGetUrl } from "@/components/storageUpload";
+import { generateDescriptionFromUrl, generateEmbeddingFromText } from "@/components/aiTools";
+
 
 
 export default function Camera() {
@@ -15,10 +18,6 @@ export default function Camera() {
 
   const cameraRef = useRef<CameraView | null>(null);
 
-    // Fake embedding (128 dimensions)
-  const generateFakeEmbedding = () => {
-    return Array.from({ length: 128 }, () => Math.random());
-  };
 
   if (!permission) {
     // Camera permissions are still loading.
@@ -59,12 +58,25 @@ const handleSavePhoto = async () => {
   if (!photo?.uri) return;
 
   try {
+    // 1️⃣ Save locally
     const savedFile = await savePhotoToScimFolder(photo.uri);
-    console.log('Saved to:', savedFile.uri);
-    const embedding = generateFakeEmbedding();
+    console.log('Saved locally:', savedFile.uri);
 
+    // 2️⃣ Upload to Firebase Storage
+    const imageUrl = await uploadItemImageAndGetUrl(savedFile.uri);
+    console.log("Uploaded image:", imageUrl);
 
-    insertItem('Photo', savedFile.uri, null, embedding);
+    // 3️⃣ Generate AI description
+    const description = await generateDescriptionFromUrl(imageUrl);
+    console.log("AI description:", description);
+
+    // 4️⃣ Generate embedding
+    const embedding = await generateEmbeddingFromText(description);
+    console.log("Embedding length:", embedding.length);
+
+    // 5️⃣ Store locally in SQLite
+    insertItem(description, savedFile.uri, null, embedding);
+
     setPhoto(null);
 
   } catch (error) {

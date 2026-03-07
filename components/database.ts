@@ -27,6 +27,7 @@ export type Item = {
  * Initialize database tables
  */
 export function initDatabase() {
+  // One-time migration: add image_uri if it doesn't exist
   db.execSync(`
     CREATE TABLE IF NOT EXISTS containers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,7 +35,6 @@ export function initDatabase() {
       image_uri TEXT,
       embedding TEXT
     );
-
 
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +45,23 @@ export function initDatabase() {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (container_id) REFERENCES containers (id)
     );
-  `);
+    `
+  );
+
+  // Try to add missing column on older installs
+  try {
+    db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`);
+  } catch (e) {
+    // ignore if it already exists
+  }
+
+  try {
+    db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`);
+  } catch (e) {
+    // ignore if it already exists
+  }
+    console.log(db.getAllSync(`PRAGMA table_info(containers);`));
+
 }
 
 /**
@@ -117,6 +133,7 @@ export function insertContainer(
       embedding ? JSON.stringify(embedding) : null
     ]
   );
+
 }
 /**
  * Get all containers
@@ -125,6 +142,7 @@ export function getAllContainers() {
   return db.getAllSync(
     `SELECT * FROM containers ORDER BY id DESC`
   );
+
 
 }
 
@@ -147,3 +165,16 @@ export function generateFakeEmbedding() {
 }
 
 
+export function consoleAllData() {
+    console.log(db.getAllSync(`PRAGMA table_info(containers);`));
+    console.log(db.getAllSync(`PRAGMA table_info(items);`));
+    
+}
+
+
+export function clearDatabase() {
+  db.runSync(`DELETE FROM items;`);
+  db.runSync(`DELETE FROM containers;`);
+  consoleAllData();
+  db.runSync('')
+}

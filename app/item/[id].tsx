@@ -14,10 +14,7 @@ export default function ItemDetail() {
   const router = useRouter();
   const [item, setItem] = useState<any | null>(null);
 
-  // const handleAddItem = () =>
-  // {
-  //   insertItem(container.id, `Item ${items.length + 1}`, generateFakeEmbedding());
-  // }
+
 
     const handleDelete = () => {
     if (!item) return;

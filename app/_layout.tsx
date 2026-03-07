@@ -5,10 +5,6 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
-
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -16,12 +12,9 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         {/* Tabs */}
-        <Stack.Screen
-          name="(tabs)"
-          options={{ headerShown: false }}
-        />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-        {/* Container Modal */}
+        {/* Container screens */}
         <Stack.Screen
           name="container/[id]"
           options={{
@@ -36,6 +29,23 @@ export default function RootLayout() {
             presentation: 'modal',
             animation: 'slide_from_bottom',
             title: 'Create Container',
+          }}
+        />
+
+        {/* (Optional) Item screens as modals */}
+        <Stack.Screen
+          name="item/[id]"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+          }}
+        />
+        <Stack.Screen
+          name="item/create"
+          options={{
+            presentation: 'modal',
+            animation: 'slide_from_bottom',
+            title: 'Create Item',
           }}
         />
       </Stack>

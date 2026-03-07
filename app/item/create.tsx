@@ -12,23 +12,26 @@ import {
   CameraView,
   useCameraPermissions,
 } from 'expo-camera';
-
+import { identifyItemsInImage } from '@/components/aiTools';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { insertItem, generateFakeEmbedding } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
+import { Picker } from '@react-native-picker/picker';
 
 export default function CreateItem() {
   const router = useRouter();
   const { containerId } = useLocalSearchParams();
-
   const [name, setName] = useState('');
+
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [showCamera, setShowCamera] = useState(false);
-
+  const [value, setValue] = useState<string | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
+  const [itemData, setItemData] = useState<{ label: string }[]>([]);
+
 
   const handleTakePhoto = async () => {
     if (!cameraRef.current) return;
@@ -43,6 +46,13 @@ export default function CreateItem() {
     if (!photoData?.uri) return;
 
     setPhoto({ uri: photoData.uri });
+    const items = await identifyItemsInImage(photoData.uri);
+    const formattedItems = items.map(itemName => ({
+      label: itemName,
+    }));
+
+    setItemData(formattedItems);
+
     setShowCamera(false);
   };
 
@@ -135,6 +145,16 @@ export default function CreateItem() {
         onChangeText={setName}
         style={styles.input}
       />
+      <Picker
+        selectedValue={value}
+        onValueChange={(itemValue) => setValue(itemValue)}
+        style={styles.picker}
+      >
+        
+        {itemData.map((item, index) => (
+          <Picker.Item key={index} label={item.label} value={item.label} />
+        ))}
+      </Picker>
 
       <TouchableOpacity
         style={styles.imageButton}
@@ -204,6 +224,11 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
+  },
+
+  picker: {
+    height: 50,
+    width: '100%',
   },
 
   permissionContainer: {
