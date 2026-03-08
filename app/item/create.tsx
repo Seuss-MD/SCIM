@@ -48,6 +48,7 @@ export default function CreateItem() {
     setPhoto({ uri: photoData.uri });
     const items = await identifyItemsInImage(photoData.uri);
     const formattedItems = items.map(itemName => ({
+    
       label: itemName,
     }));
 
