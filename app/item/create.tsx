@@ -12,7 +12,6 @@ import {
   CameraView,
   useCameraPermissions,
 } from 'expo-camera';
-import { identifyItemsInImage } from '@/components/aiTools';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { insertItem, generateFakeEmbedding } from '@/components/database';
@@ -36,58 +35,77 @@ export default function CreateItem() {
   const handleTakePhoto = async () => {
     if (!cameraRef.current) return;
 
-    const photoData = await cameraRef.current.takePictureAsync({
-      quality: 1,
-      base64: false,
-      exif: false,
-      shutterSound: false,
-    });
-
-    if (!photoData?.uri) return;
-
-    setPhoto({ uri: photoData.uri });
-    const items = await identifyItemsInImage(photoData.uri);
-    const formattedItems = items.map(itemName => ({
-    
-      label: itemName,
-    }));
-
-    setItemData(formattedItems);
-
-    setShowCamera(false);
-  };
-
-  async function handleCreate() {
-    if (!name.trim()) return;
-
-    if (!photo?.uri) {
-      Alert.alert('Missing Image', 'Please take a picture first.');
-      return;
-    }
-
-    if (!containerId) {
-      Alert.alert('Error', 'Missing container ID.');
-      return;
-    }
-
     try {
-      const savedFile = await savePhotoToScimFolder(photo.uri);
+      const photoData = await cameraRef.current.takePictureAsync({
+        quality: 1,
+        base64: false,
+        exif: false,
+        shutterSound: false,
+      });
 
-      const embedding = generateFakeEmbedding();
+      if (!photoData?.uri) return;
 
-      insertItem(
-        name.trim(),
-        savedFile.uri,
-        Number(containerId),
-        embedding,
+      setPhoto({ uri: photoData.uri });
+
+
+      setShowCamera(false);
+    } catch (error: any) {
+      console.error('identifyItemsInImage failed:', error);
+      Alert.alert(
+        'Image analysis failed',
+        error?.message ?? 'Could not analyze the image.'
       );
-
-      router.back();
-    } catch (error) {
-      console.error('Failed to create item:', error);
-      Alert.alert('Error', 'Failed to save item.');
+      setShowCamera(false);
     }
+  };
+async function handleCreate() {
+  const finalName = name.trim();
+  const parsedContainerId = Array.isArray(containerId)
+    ? Number(containerId[0])
+    : Number(containerId);
+
+  if (!finalName) {
+    Alert.alert('Missing name', 'Please enter an item name.');
+    return;
   }
+
+  if (!photo?.uri) {
+    Alert.alert('Missing Image', 'Please take a picture first.');
+    return;
+  }
+
+  if (!containerId || Number.isNaN(parsedContainerId)) {
+    Alert.alert('Error', 'Missing or invalid container ID.');
+    return;
+  }
+
+  try {
+    console.log('photo uri:', photo.uri);
+    console.log('parsedContainerId:', parsedContainerId);
+
+    const savedFile = await savePhotoToScimFolder(photo.uri);
+    console.log('saved file:', savedFile);
+
+    const embedding = generateFakeEmbedding();
+    console.log('embedding:', embedding);
+
+    await insertItem(
+      finalName,
+      savedFile.uri,
+      parsedContainerId,
+      embedding,
+    );
+
+    router.back();
+  } catch (error: any) {
+    console.error('Failed to create item:', error);
+    console.error('message:', error?.message);
+    Alert.alert(
+      'Error',
+      error?.message ?? 'Failed to save item.'
+    );
+  }
+}
 
   if (!permission) return <View />;
 
