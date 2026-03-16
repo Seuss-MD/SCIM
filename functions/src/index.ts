@@ -32,8 +32,7 @@
 // });
 
 
-
-import { onCall } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import OpenAI from "openai";
 
@@ -43,7 +42,10 @@ export const generateDescription = onCall(
   { secrets: [openAiKey] },
   async (request) => {
     const { imageUrl } = request.data as { imageUrl?: string };
-    if (!imageUrl) throw new Error("imageUrl is required");
+
+    if (!imageUrl) {
+      throw new HttpsError("invalid-argument", "imageUrl is required");
+    }
 
     const openai = new OpenAI({ apiKey: openAiKey.value() });
 
@@ -53,8 +55,14 @@ export const generateDescription = onCall(
         {
           role: "user",
           content: [
-            { type: "text", text: "Describe this object clearly for inventory tracking." },
-            { type: "image_url", image_url: { url: imageUrl } },
+            {
+              type: "text",
+              text: "Describe this object clearly for inventory tracking.",
+            },
+            {
+              type: "image_url",
+              image_url: { url: imageUrl },
+            },
           ],
         },
       ],
@@ -65,20 +73,24 @@ export const generateDescription = onCall(
   }
 );
 
-// embedding function stays the same
 export const generateEmbedding = onCall(
   { secrets: [openAiKey] },
   async (request) => {
-    const { text } = request.data as { text?: string };
-    if (!text) throw new Error("text is required");
+    const text = request.data?.text;
+
+    if (!text || typeof text !== "string") {
+      throw new HttpsError("invalid-argument", "Text is required");
+    }
 
     const openai = new OpenAI({ apiKey: openAiKey.value() });
 
-    const emb = await openai.embeddings.create({
+    const response = await openai.embeddings.create({
       model: "text-embedding-3-small",
       input: text,
     });
 
-    return { embedding: emb.data[0].embedding };
+    return {
+      embedding: response.data[0].embedding,
+    };
   }
 );

@@ -47,26 +47,13 @@ export function initDatabase() {
   `);
 
   // containers migrations
-  try {
-    db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`);
-  } catch {}
+  try { db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`); } catch {}
+  try { db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`); } catch {}
 
-  try {
-    db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`);
-  } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`); } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`); } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`); } catch {}
 
-  // items migrations
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`);
-  } catch {}
-
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`);
-  } catch {}
-
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
-  } catch {}
 
 }
 
@@ -101,8 +88,9 @@ export function deleteItem(id: number) {
 /**
  * Get all items
  */
-export function getAllItems() {
-  return db.getAllSync(`SELECT * FROM items ORDER BY created_at DESC`);
+export function getAllItems(): Item[] 
+{
+  return db.getAllSync(`SELECT * FROM items ORDER BY created_at DESC`) as Item[];
 }
 
 /**
@@ -144,12 +132,11 @@ export function insertContainer(
 /**
  * Get all containers
  */
-export function getAllContainers() {
+export function getAllContainers(): Container[] 
+{
   return db.getAllSync(
     `SELECT * FROM containers ORDER BY id DESC`
-  );
-
-
+  ) as Container[];
 }
 
 export function getContainerById(id: number): Container | null {
@@ -166,10 +153,6 @@ export function deleteContainer(id: number) {
   );
 }
 
-export function generateFakeEmbedding() {
-  return Array.from({ length: 128 }, () => Math.random());
-}
-
 
 export function consoleAllData() {
     console.log(db.getAllSync(`PRAGMA table_info(containers);`));
@@ -182,4 +165,96 @@ export function clearDatabase() {
   db.runSync(`DELETE FROM items;`);
   db.runSync(`DELETE FROM containers;`);
   consoleAllData();
+}
+
+function parseEmbedding(value: string | null): number[] | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return -1;
+
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denom === 0) return -1;
+
+  return dot / denom;
+}
+
+export type ItemSearchResult = Item & {
+  similarity: number;
+};
+
+export function searchItemsByEmbedding(
+  queryEmbedding: number[],
+  containerId?: number,
+  limit = 20
+): ItemSearchResult[] {
+  const items = typeof containerId === 'number'
+    ? (db.getAllSync(
+        `SELECT * FROM items WHERE container_id = ?`,
+        [containerId]
+      ) as Item[])
+    : (db.getAllSync(`SELECT * FROM items`) as Item[]);
+
+  const ranked = items
+    .map((item) => {
+      const itemEmbedding = parseEmbedding(item.embedding);
+      const similarity = itemEmbedding
+        ? cosineSimilarity(queryEmbedding, itemEmbedding)
+        : -1;
+
+      return {
+        ...item,
+        similarity,
+      };
+    })
+    .filter((item) => item.similarity >= 0)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+
+  return ranked;
+}
+
+export type ContainerSearchResult = Container & {
+  similarity: number;
+};
+
+export function searchContainersByEmbedding(
+  queryEmbedding: number[],
+  limit = 20
+): ContainerSearchResult[] {
+  const containers = db.getAllSync(`SELECT * FROM containers`) as Container[];
+
+  return containers
+    .map((container) => {
+      const containerEmbedding = parseEmbedding(container.embedding);
+      const similarity = containerEmbedding
+        ? cosineSimilarity(queryEmbedding, containerEmbedding)
+        : -1;
+
+      return {
+        ...container,
+        similarity,
+      };
+    })
+    .filter((container) => container.similarity >= 0)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
 }

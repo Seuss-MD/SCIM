@@ -1,3 +1,4 @@
+//app/item/create.tsx
 import { useRef, useState } from 'react';
 import {
   StyleSheet,
@@ -14,14 +15,17 @@ import {
 } from 'expo-camera';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-import { insertItem, generateFakeEmbedding } from '@/components/database';
+import { insertItem } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { Picker } from '@react-native-picker/picker';
+import { generateEmbeddingFromText, generateDescriptionFromUrl } from '@/components/aiTools';
 
 export default function CreateItem() {
   const router = useRouter();
   const { containerId } = useLocalSearchParams();
   const [name, setName] = useState('');
+
+  const [description, setDescription] = useState('');
 
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const [flash, setFlash] = useState<'off' | 'on'>('off');
@@ -80,14 +84,12 @@ async function handleCreate() {
   }
 
   try {
-    console.log('photo uri:', photo.uri);
-    console.log('parsedContainerId:', parsedContainerId);
 
     const savedFile = await savePhotoToScimFolder(photo.uri);
-    console.log('saved file:', savedFile);
 
-    const embedding = generateFakeEmbedding();
-    console.log('embedding:', embedding);
+    const description = await generateDescriptionFromUrl(savedFile.uri);
+
+    const embedding = await generateEmbeddingFromText(description);
 
     await insertItem(
       finalName,

@@ -6,7 +6,7 @@ import { StyleSheet, View, Image, Alert, TouchableOpacity } from 'react-native';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { getItemsByContainer, getContainerById, deleteContainer, insertItem, generateFakeEmbedding, deleteItem } from '@/components/database';
+import { getItemsByContainer, getContainerById, deleteContainer, insertItem, deleteItem } from '@/components/database';
 
 export default function ContainerDetail() {
   const { id } = useLocalSearchParams();
@@ -15,10 +15,7 @@ export default function ContainerDetail() {
   const router = useRouter();
   const [items, setItems] = useState<any[]>([]);
 
-  // const handleAddItem = () =>
-  // {
-  //   insertItem(container.id, `Item ${items.length + 1}`, generateFakeEmbedding());
-  // }
+
 
   const handleDeleteContainer = () => {
     if (!container) return;

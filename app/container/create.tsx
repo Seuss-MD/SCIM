@@ -1,4 +1,4 @@
-//create.tsx
+//app/container/create.tsx
 import { useRef, useState } from 'react';
 import {
   StyleSheet,
@@ -11,25 +11,29 @@ import {
 import { useRouter } from 'expo-router';
 import {
   CameraView,
-  CameraType,
   useCameraPermissions,
 } from 'expo-camera';
 
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
-import { insertContainer, generateFakeEmbedding } from '@/components/database';
+import { insertContainer } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
+import { generateEmbeddingFromText } from '@/components/aiTools';
 
 export default function CreateContainer() {
   const router = useRouter();
 
   const [name, setName] = useState('');
+
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [showCamera, setShowCamera] = useState(false);
+  const cameraRef = useRef<CameraView | null>(null);
+  const [zoom, setZoom] = useState(0);
+
+  const [description, setDescription] = useState('');
 
   const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef<CameraView | null>(null);
 
   const handleTakePhoto = async () => {
     if (!cameraRef.current) return;
@@ -48,31 +52,38 @@ export default function CreateContainer() {
     setShowCamera(false);
   };
 
-  async function handleCreate() {
-    if (!name.trim()) return;
+  async function handleCreate() 
+    {
+      if (!name.trim()) 
+      {
+        Alert.alert('Missing Name', 'Please enter a name for the container.');
+        return;
+      }
 
-    if (!photo?.uri) {
-      Alert.alert('Missing Image', 'Please take a picture first.');
-      return;
+      if (!photo?.uri) 
+      {
+        Alert.alert('Missing Image', 'Please take a picture first.');
+        return;
+      }
+
+
+      try {
+        const savedFile = await savePhotoToScimFolder(photo.uri);
+
+        const embedding = await generateEmbeddingFromText(name.trim());
+
+        insertContainer(
+          name.trim(),
+          savedFile.uri,
+          embedding
+        );
+
+        router.back();
+      } catch (error) {
+        console.error('Failed to create container:', error);
+        Alert.alert('Error', 'Failed to save container.');
+      }
     }
-
-    try {
-      const savedFile = await savePhotoToScimFolder(photo.uri);
-
-      const embedding = generateFakeEmbedding();
-
-      insertContainer(
-        name.trim(),
-        savedFile.uri,
-        embedding
-      );
-
-      router.back();
-    } catch (error) {
-      console.error('Failed to create container:', error);
-      Alert.alert('Error', 'Failed to save container.');
-    }
-  }
 
   // Permission loading
   if (!permission) return <View />;
@@ -104,6 +115,7 @@ export default function CreateContainer() {
           facing={'back'}
           ref={cameraRef}
           flash={flash}
+          zoom={zoom}
         />
 
         <View style={styles.cameraControls}>

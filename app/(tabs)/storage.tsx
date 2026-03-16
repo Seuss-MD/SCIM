@@ -19,7 +19,8 @@ export default function StorageScreen() {
   const loadContainers = () => {
     const data = getAllContainers();
     setContainers(data);
-    consoleAllData();
+    //for debugging
+    //consoleAllData();
 
   };
 
