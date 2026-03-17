@@ -15,10 +15,12 @@ import {
 } from 'expo-camera';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
+
+import { generateEmbeddingFromText, generateDescriptionFromUrl } from '@/components/aiTools';
 import { insertItem } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { Picker } from '@react-native-picker/picker';
-import { generateEmbeddingFromText, generateDescriptionFromUrl } from '@/components/aiTools';
+import { generateEmbeddingFromImage } from '@/components/aiTools';
 
 export default function CreateItem() {
   const router = useRouter();
@@ -84,28 +86,22 @@ async function handleCreate() {
   }
 
   try {
-
     const savedFile = await savePhotoToScimFolder(photo.uri);
 
-    const description = await generateDescriptionFromUrl(savedFile.uri);
+    const { description, embedding } = await generateEmbeddingFromImage(savedFile.uri);
 
-    const embedding = await generateEmbeddingFromText(description);
-
-    await insertItem(
-      finalName,
+    insertItem(
+      finalName || description,
       savedFile.uri,
       parsedContainerId,
-      embedding,
+      embedding
     );
 
     router.back();
   } catch (error: any) {
     console.error('Failed to create item:', error);
     console.error('message:', error?.message);
-    Alert.alert(
-      'Error',
-      error?.message ?? 'Failed to save item.'
-    );
+    Alert.alert('Error', error?.message ?? 'Failed to save item.');
   }
 }
 

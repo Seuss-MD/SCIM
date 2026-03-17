@@ -1,13 +1,22 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../firebase';
+import { useAuthUser } from "@/components/authGate";
+
 
 export default function ProfileScreen() {
-  const user = auth.currentUser;
-
+  const { user, loading } = useAuthUser();
   const handleLogout = async () => {
     await signOut(auth);
   };
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text >Loading...</Text>
+      </View>
+    );
+  }
+
 
   return (
     <View style={styles.container}>
@@ -15,7 +24,9 @@ export default function ProfileScreen() {
 
       <View style={styles.card}>
         <Text style={styles.label}>Email</Text>
-        <Text style={styles.value}>{user?.email}</Text>
+        <Text style={styles.value}>
+          {user ? user.email : "not signed in"}
+        </Text>
       </View>
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>

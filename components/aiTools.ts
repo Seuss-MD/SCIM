@@ -1,35 +1,41 @@
-import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app } from '../firebase';
-import { uploadItemImageAndGetUrl } from './storageUpload';
-import { Alert } from 'react-native/Libraries/Alert/Alert';
-import Camera from '@/app/(tabs)/camera';
-
-const functions = getFunctions(app, 'us-central1');
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../firebase";
+import { uploadItemImageAndGetUrl } from "./storageUpload";
 
 export async function generateDescriptionFromUrl(imageUrl: string): Promise<string> {
-  const fn = httpsCallable(functions, 'generateDescription');
+  const fn = httpsCallable(functions, "generateDescription");
   const res: any = await fn({ imageUrl });
   return res.data.description;
 }
 
 export async function generateEmbeddingFromText(text: string): Promise<number[]> {
-  const callable = httpsCallable(functions, 'generateEmbedding');
-  const result = await callable({ text });
+  const fn = httpsCallable(functions, "generateEmbedding");
+  const res: any = await fn({ text });
 
-  const data = result.data as { embedding?: number[] };
-
-  if (!data?.embedding || !Array.isArray(data.embedding)) {
-    throw new Error('Embedding response was invalid');
+  if (!Array.isArray(res.data?.embedding)) {
+    throw new Error("Invalid embedding response");
   }
 
-  return data.embedding;
+  return res.data.embedding;
 }
 
-export async function identifyItemsInImage(localUri: string): Promise<string[]> {
+export async function generateEmbeddingFromImage(localUri: string): Promise<{
+  imageUrl: string;
+  description: string;
+  embedding: number[];
+}> {
   const imageUrl = await uploadItemImageAndGetUrl(localUri);
 
-  const fn = httpsCallable(functions, 'identifyItemsInImage');
+  const fn = httpsCallable(functions, "generateImageEmbedding");
   const res: any = await fn({ imageUrl });
 
-  return res.data.items ?? [];
+  if (!res.data?.description || !Array.isArray(res.data?.embedding)) {
+    throw new Error("Invalid image embedding response");
+  }
+
+  return {
+    imageUrl,
+    description: res.data.description,
+    embedding: res.data.embedding,
+  };
 }

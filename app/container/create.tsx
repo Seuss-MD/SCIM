@@ -16,9 +16,11 @@ import {
 
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
+
+import { generateEmbeddingFromText } from '@/components/aiTools';
 import { insertContainer } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
-import { generateEmbeddingFromText } from '@/components/aiTools';
+import { generateEmbeddingFromImage } from '@/components/aiTools';
 
 export default function CreateContainer() {
   const router = useRouter();
@@ -52,38 +54,32 @@ export default function CreateContainer() {
     setShowCamera(false);
   };
 
-  async function handleCreate() 
-    {
-      if (!name.trim()) 
-      {
-        Alert.alert('Missing Name', 'Please enter a name for the container.');
-        return;
-      }
+  async function handleCreate() {
+  if (!name.trim()) return;
 
-      if (!photo?.uri) 
-      {
-        Alert.alert('Missing Image', 'Please take a picture first.');
-        return;
-      }
+  if (!photo?.uri) {
+    Alert.alert('Missing Image', 'Please take a picture first.');
+    return;
+  }
 
+  try {
+    const savedFile = await savePhotoToScimFolder(photo.uri);
 
-      try {
-        const savedFile = await savePhotoToScimFolder(photo.uri);
+    const { embedding } = await generateEmbeddingFromImage(savedFile.uri);
 
-        const embedding = await generateEmbeddingFromText(name.trim());
+    insertContainer(
+      name.trim(),
+      savedFile.uri,
+      embedding
+    );
 
-        insertContainer(
-          name.trim(),
-          savedFile.uri,
-          embedding
-        );
-
-        router.back();
-      } catch (error) {
-        console.error('Failed to create container:', error);
-        Alert.alert('Error', 'Failed to save container.');
-      }
-    }
+    router.back();
+  } catch (error: any) {
+    console.error('Failed to create container:', error);
+    console.error('message:', error?.message);
+    Alert.alert('Error', error?.message ?? 'Failed to save container.');
+  }
+}
 
   // Permission loading
   if (!permission) return <View />;
