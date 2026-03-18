@@ -4,6 +4,7 @@ import {
   FlatList,
   Image,
   StyleSheet,
+  Switch,
   TextInput,
   TouchableOpacity,
   View,
@@ -12,6 +13,7 @@ import { router } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import ScimCamera from '@/components/ScimCam';
 import {
   searchContainersByEmbedding,
   searchItemsByEmbedding,
@@ -22,12 +24,17 @@ import { generateEmbeddingFromText } from '@/components/aiTools';
 import { Ionicons } from '@expo/vector-icons';
 
 type SearchMode = 'items' | 'containers';
+type SearchInputMode = 'text' | 'image';
+type PhotoResult = { uri: string };
 
 export default function HomeScreen() {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<SearchMode>('items');
+  const [inputMode, setInputMode] = useState<SearchInputMode>('text');
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [photo, setPhoto] = useState<PhotoResult | null>(null);
 
   const [itemResults, setItemResults] = useState<ItemSearchResult[]>([]);
   const [containerResults, setContainerResults] = useState<ContainerSearchResult[]>([]);
@@ -102,33 +109,70 @@ export default function HomeScreen() {
     );
   }
 
-  const results = mode === 'items' ? itemResults : containerResults;
+  if (showCamera) {
+    return (
+      <ScimCamera
+        onPhotoTaken={(capturedPhoto: PhotoResult) => {
+          setPhoto(capturedPhoto);
+          setShowCamera(false);
+        }}
+        onCancel={() => setShowCamera(false)}
+      />
+    );
+  }
 
   return (
     <ThemedView style={styles.container}>
       <ThemedText style={styles.header}>Search</ThemedText>
-      
 
       <View style={styles.searchBox}>
-        <View style={styles.searchInputWrapper}>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={`Search ${mode}...`}
-            placeholderTextColor="#9CA3AF"
-            style={styles.input}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-          />
+        {inputMode === 'text' ? (
+          <View style={styles.searchInputWrapper}>
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={`Search ${mode}...`}
+              placeholderTextColor="#9CA3AF"
+              style={styles.input}
+              returnKeyType="search"
+              onSubmitEditing={handleSearch}
+            />
 
+            <TouchableOpacity
+              onPress={handleSearch}
+              style={styles.searchIconButton}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="search" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        ) : (
           <TouchableOpacity
-            onPress={handleSearch}
-            style={styles.searchIconButton}
+            style={styles.imageModeButton}
             activeOpacity={0.8}
+            onPress={() => setShowCamera(true)}
           >
-            <Ionicons name="search" size={20} color="#FFFFFF" />
+            <Ionicons name="camera-outline" size={20} color="#111827" />
+            <ThemedText style={styles.imageModeButtonText}>
+              {photo ? 'Retake Image' : 'Image Search'}
+            </ThemedText>
           </TouchableOpacity>
+        )}
+
+        <View style={styles.switchRow}>
+          <ThemedText style={styles.switchLabel}>Text</ThemedText>
+          <Switch
+            value={inputMode === 'image'}
+            onValueChange={(value) => setInputMode(value ? 'image' : 'text')}
+            trackColor={{ false: '#D1D5DB', true: '#93C5FD' }}
+            thumbColor={inputMode === 'image' ? '#2563EB' : '#FFFFFF'}
+          />
+          <ThemedText style={styles.switchLabel}>Image</ThemedText>
         </View>
+
+        {photo && inputMode === 'image' && (
+          <Image source={{ uri: photo.uri }} style={styles.previewImage} />
+        )}
 
         <View style={styles.toggleRow}>
           <TouchableOpacity
@@ -158,7 +202,7 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" />
           <ThemedText>Searching...</ThemedText>
         </View>
-      ) : mode === 'items' ? (
+      ) : !searched ? null : mode === 'items' ? (
         itemResults.length > 0 ? (
           <FlatList
             data={itemResults}
@@ -166,13 +210,9 @@ export default function HomeScreen() {
             renderItem={renderItemResult}
             contentContainerStyle={styles.listContent}
           />
-        ) : searched ? (
-          <View style={styles.centerState}>
-            <ThemedText>No item results found.</ThemedText>
-          </View>
         ) : (
           <View style={styles.centerState}>
-            <ThemedText>Search your stored items.</ThemedText>
+            <ThemedText>No items found.</ThemedText>
           </View>
         )
       ) : containerResults.length > 0 ? (
@@ -182,13 +222,9 @@ export default function HomeScreen() {
           renderItem={renderContainerResult}
           contentContainerStyle={styles.listContent}
         />
-      ) : searched ? (
-        <View style={styles.centerState}>
-          <ThemedText>No container results found.</ThemedText>
-        </View>
       ) : (
         <View style={styles.centerState}>
-          <ThemedText>Search your stored containers.</ThemedText>
+          <ThemedText>No containers found.</ThemedText>
         </View>
       )}
     </ThemedView>
@@ -207,11 +243,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 38,
     alignSelf: 'center',
-  },
-  searchRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
   },
   searchBox: {
     width: '100%',
@@ -244,6 +275,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  switchLabel: {
+    fontWeight: '600',
+    color: '#AAAAAA',
+  },
+  imageModeButton: {
+    minHeight: 56,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  imageModeButtonText: {
+    fontWeight: '600',
+    color: '#111827',
+  },
+  previewImage: {
+    width: '100%',
+    height: 180,
+    borderRadius: 16,
+    backgroundColor: '#E5E7EB',
   },
   toggleRow: {
     flexDirection: 'row',

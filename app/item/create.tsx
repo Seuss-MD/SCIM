@@ -27,7 +27,8 @@ export default function CreateItem() {
   const [value, setValue] = useState<string | null>(null);
   const [itemData, setItemData] = useState<{ label: string }[]>([]);
 
-  async function handleCreate() {
+  async function handleCreate() 
+  {
     const finalName = name.trim();
     const parsedContainerId = Array.isArray(containerId)
       ? Number(containerId[0])
@@ -51,12 +52,11 @@ export default function CreateItem() {
     try {
       const savedFile = await savePhotoToScimFolder(photo.uri);
 
-      const { description, embedding } = await generateEmbeddingFromImage(
-        savedFile.uri
-      );
+      const { description, embedding } = await generateEmbeddingFromImage(savedFile.uri);
 
       insertItem(
         finalName || description,
+        description,
         savedFile.uri,
         parsedContainerId,
         embedding

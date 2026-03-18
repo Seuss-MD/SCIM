@@ -1,4 +1,3 @@
-
 // components/database.ts
 import * as SQLite from 'expo-sqlite';
 
@@ -8,24 +7,19 @@ export type Container = {
   id: number;
   name: string;
   image_uri: string | null;
-  embedding: string | null; 
+  embedding: string | null;
 };
-
 
 export type Item = {
   id: number;
   name: string;
+  description: string | null;
   image_uri: string;
   container_id: number | null;
   embedding: string | null;
   created_at: string;
 };
 
-
-
-/**
- * Initialize database tables
- */
 export function initDatabase() {
   db.execSync(`
     CREATE TABLE IF NOT EXISTS containers (
@@ -38,6 +32,7 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
+      description TEXT,
       image_uri TEXT NOT NULL,
       container_id INTEGER,
       embedding TEXT,
@@ -46,130 +41,95 @@ export function initDatabase() {
     );
   `);
 
-  // containers migrations
-  try { db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`); } catch {}
-  try { db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`); } catch {}
+  try {
+    db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`);
+  } catch {}
 
-  try { db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`); } catch {}
-  try { db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`); } catch {}
-  try { db.execSync(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`); } catch {}
+  try {
+    db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`);
+  } catch {}
 
+  try {
+    db.execSync(`ALTER TABLE items ADD COLUMN description TEXT;`);
+  } catch {}
 
+  try {
+    db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`);
+  } catch {}
+
+  try {
+    db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`);
+  } catch {}
+
+  try {
+    db.execSync(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
+  } catch {}
 }
 
-/**
- * Insert a new item
- */
 export function insertItem(
   name: string,
+  description: string | null,
   imageUri: string,
   containerId: number | null,
   embedding: number[] | null
 ) {
   db.runSync(
-    `INSERT INTO items (name, image_uri, container_id, embedding)
-     VALUES (?, ?, ?, ?)`,
+    `INSERT INTO items (name, description, image_uri, container_id, embedding)
+     VALUES (?, ?, ?, ?, ?)`,
     [
       name,
+      description,
       imageUri,
       containerId,
-      embedding ? JSON.stringify(embedding) : null
+      embedding ? JSON.stringify(embedding) : null,
     ]
   );
 }
 
 export function deleteItem(id: number) {
-  db.runSync(
-    `DELETE FROM items WHERE id = ?`,
-    [id]
-  );
+  db.runSync(`DELETE FROM items WHERE id = ?`, [id]);
 }
 
-/**
- * Get all items
- */
-export function getAllItems(): Item[] 
-{
+export function getAllItems(): Item[] {
   return db.getAllSync(`SELECT * FROM items ORDER BY created_at DESC`) as Item[];
 }
 
-/**
- * Get items by container
- */
 export function getItemsByContainer(containerId: number): Item[] {
   return db.getAllSync(
-    `SELECT * FROM items WHERE container_id = ?`,
+    `SELECT * FROM items WHERE container_id = ? ORDER BY created_at DESC`,
     [containerId]
   ) as Item[];
 }
 
 export function getItemById(id: number): Item | null {
-  return db.getFirstSync(
-    `SELECT * FROM items WHERE id = ?`,
-    [id]
-  ) as Item | null;
+  return db.getFirstSync(`SELECT * FROM items WHERE id = ?`, [id]) as Item | null;
 }
 
-/**
- * Insert a new container
- */
 export function insertContainer(
   name: string,
   imageUri: string | null,
   embedding: number[] | null
 ) {
   db.runSync(
-    `INSERT INTO containers (name, image_uri, embedding)
-     VALUES (?, ?, ?)`,
-    [
-      name,
-      imageUri,
-      embedding ? JSON.stringify(embedding) : null
-    ]
+    `INSERT INTO containers (name, image_uri, embedding) VALUES (?, ?, ?)`,
+    [name, imageUri, embedding ? JSON.stringify(embedding) : null]
   );
-
 }
-/**
- * Get all containers
- */
-export function getAllContainers(): Container[] 
-{
-  return db.getAllSync(
-    `SELECT * FROM containers ORDER BY id DESC`
-  ) as Container[];
+
+export function getAllContainers(): Container[] {
+  return db.getAllSync(`SELECT * FROM containers ORDER BY id DESC`) as Container[];
 }
 
 export function getContainerById(id: number): Container | null {
-  return db.getFirstSync(
-    `SELECT * FROM containers WHERE id = ?`,
-    [id]
-  ) as Container | null;
+  return db.getFirstSync(`SELECT * FROM containers WHERE id = ?`, [id]) as Container | null;
 }
 
 export function deleteContainer(id: number) {
-  db.runSync(
-    `DELETE FROM containers WHERE id = ?`,
-    [id]
-  );
-}
-
-
-export function consoleAllData() {
-    console.log(db.getAllSync(`PRAGMA table_info(containers);`));
-    console.log(db.getAllSync(`PRAGMA table_info(items);`));
-    
-}
-
-
-export function clearDatabase() {
-  db.runSync(`DELETE FROM items;`);
-  db.runSync(`DELETE FROM containers;`);
-  consoleAllData();
+  db.runSync(`DELETE FROM containers WHERE id = ?`, [id]);
 }
 
 function parseEmbedding(value: string | null): number[] | null {
   if (!value) return null;
-
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed) ? parsed : null;
@@ -178,7 +138,7 @@ function parseEmbedding(value: string | null): number[] | null {
   }
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
+export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return -1;
 
   let dot = 0;
@@ -197,44 +157,30 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / denom;
 }
 
-export type ItemSearchResult = Item & {
-  similarity: number;
-};
+export type ItemSearchResult = Item & { similarity: number };
 
 export function searchItemsByEmbedding(
   queryEmbedding: number[],
   containerId?: number,
   limit = 20
 ): ItemSearchResult[] {
-  const items = typeof containerId === 'number'
-    ? (db.getAllSync(
-        `SELECT * FROM items WHERE container_id = ?`,
-        [containerId]
-      ) as Item[])
-    : (db.getAllSync(`SELECT * FROM items`) as Item[]);
+  const items =
+    typeof containerId === 'number'
+      ? (db.getAllSync(`SELECT * FROM items WHERE container_id = ?`, [containerId]) as Item[])
+      : (db.getAllSync(`SELECT * FROM items`) as Item[]);
 
-  const ranked = items
+  return items
     .map((item) => {
       const itemEmbedding = parseEmbedding(item.embedding);
-      const similarity = itemEmbedding
-        ? cosineSimilarity(queryEmbedding, itemEmbedding)
-        : -1;
-
-      return {
-        ...item,
-        similarity,
-      };
+      const similarity = itemEmbedding ? cosineSimilarity(queryEmbedding, itemEmbedding) : -1;
+      return { ...item, similarity };
     })
     .filter((item) => item.similarity >= 0)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
-
-  return ranked;
 }
 
-export type ContainerSearchResult = Container & {
-  similarity: number;
-};
+export type ContainerSearchResult = Container & { similarity: number };
 
 export function searchContainersByEmbedding(
   queryEmbedding: number[],
@@ -248,11 +194,7 @@ export function searchContainersByEmbedding(
       const similarity = containerEmbedding
         ? cosineSimilarity(queryEmbedding, containerEmbedding)
         : -1;
-
-      return {
-        ...container,
-        similarity,
-      };
+      return { ...container, similarity };
     })
     .filter((container) => container.similarity >= 0)
     .sort((a, b) => b.similarity - a.similarity)

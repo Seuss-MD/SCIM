@@ -1,5 +1,11 @@
-import { useRef, useState } from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  BackHandler,
+  Platform,
+  TouchableOpacity,
+  View,
+  StyleSheet,
+} from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -16,11 +22,21 @@ export default function ScimCamera({
 }: ScimCameraProps) {
   const cameraRef = useRef<CameraView | null>(null);
   const [flash, setFlash] = useState<'off' | 'on'>('off');
-
-  // 0 = most zoomed out
-  const [zoom, setZoom] = useState(0);
-
   const [permission, requestPermission] = useCameraPermissions();
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        onCancel();
+        return true;
+      }
+    );
+
+    return () => subscription.remove();
+  }, [onCancel]);
 
   const handleTakePhoto = async () => {
     if (!cameraRef.current) return;
@@ -35,20 +51,6 @@ export default function ScimCamera({
     if (!photoData?.uri) return;
 
     onPhotoTaken({ uri: photoData.uri });
-  };
-
-  const handleToggleZoom = () => {
-    setZoom((currentZoom) => {
-      if (currentZoom === 0) return 0.1;
-      if (currentZoom === 0.1) return 0.15;
-      return 0;
-    });
-  };
-
-  const getZoomLabel = () => {
-    if (zoom === 0) return '1x';
-    if (zoom === 0.1) return '1.5x';
-    return '2x';
   };
 
   if (!permission) {
@@ -88,19 +90,18 @@ export default function ScimCamera({
         facing="back"
         ref={cameraRef}
         flash={flash}
-        zoom={zoom}
       />
 
       <View style={styles.cameraControls}>
         <TouchableOpacity
-        style={styles.iconButton}
-        onPress={() => setFlash(flash === 'off' ? 'on' : 'off')}
+          style={styles.iconButton}
+          onPress={() => setFlash(flash === 'off' ? 'on' : 'off')}
         >
-        <MaterialCommunityIcons
+          <MaterialCommunityIcons
             name={flash === 'off' ? 'flash-off' : 'flash'}
             size={24}
             color="white"
-        />
+          />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -109,12 +110,14 @@ export default function ScimCamera({
         />
 
         <TouchableOpacity
-          style={styles.smallButton}
-          onPress={handleToggleZoom}
+          style={styles.iconButton}
+          onPress={onCancel}
         >
-          <ThemedText style={{ color: 'white' }}>
-            {getZoomLabel()}
-          </ThemedText>
+          <MaterialCommunityIcons
+            name="arrow-left"
+            size={24}
+            color="white"
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -151,14 +154,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  smallButton: {
-    minWidth: 88,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 20,
-    alignItems: 'center',
-  },
   iconButton: {
     width: 44,
     height: 44,
@@ -166,7 +161,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    },
+  },
 
   captureButton: {
     width: 80,
