@@ -1,156 +1,84 @@
-//app/item/create.tsx
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  View,
   Alert,
   Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import {
-  CameraView,
-  useCameraPermissions,
-} from 'expo-camera';
+import { Picker } from '@react-native-picker/picker';
+
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
+import ScimCamera from '@/components/ScimCam';
 
-import { generateEmbeddingFromText, generateDescriptionFromUrl } from '@/components/aiTools';
 import { insertItem } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
-import { Picker } from '@react-native-picker/picker';
 import { generateEmbeddingFromImage } from '@/components/aiTools';
 
 export default function CreateItem() {
   const router = useRouter();
   const { containerId } = useLocalSearchParams();
+
   const [name, setName] = useState('');
-
-  const [description, setDescription] = useState('');
-
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
-  const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [showCamera, setShowCamera] = useState(false);
   const [value, setValue] = useState<string | null>(null);
-  const [permission, requestPermission] = useCameraPermissions();
-  const cameraRef = useRef<CameraView | null>(null);
   const [itemData, setItemData] = useState<{ label: string }[]>([]);
 
+  async function handleCreate() {
+    const finalName = name.trim();
+    const parsedContainerId = Array.isArray(containerId)
+      ? Number(containerId[0])
+      : Number(containerId);
 
-  const handleTakePhoto = async () => {
-    if (!cameraRef.current) return;
+    if (!finalName) {
+      Alert.alert('Missing name', 'Please enter an item name.');
+      return;
+    }
+
+    if (!photo?.uri) {
+      Alert.alert('Missing Image', 'Please take a picture first.');
+      return;
+    }
+
+    if (!containerId || Number.isNaN(parsedContainerId)) {
+      Alert.alert('Error', 'Missing or invalid container ID.');
+      return;
+    }
 
     try {
-      const photoData = await cameraRef.current.takePictureAsync({
-        quality: 1,
-        base64: false,
-        exif: false,
-        shutterSound: false,
-      });
+      const savedFile = await savePhotoToScimFolder(photo.uri);
 
-      if (!photoData?.uri) return;
-
-      setPhoto({ uri: photoData.uri });
-
-
-      setShowCamera(false);
-    } catch (error: any) {
-      console.error('identifyItemsInImage failed:', error);
-      Alert.alert(
-        'Image analysis failed',
-        error?.message ?? 'Could not analyze the image.'
+      const { description, embedding } = await generateEmbeddingFromImage(
+        savedFile.uri
       );
-      setShowCamera(false);
+
+      insertItem(
+        finalName || description,
+        savedFile.uri,
+        parsedContainerId,
+        embedding
+      );
+
+      router.back();
+    } catch (error: any) {
+      console.error('Failed to create item:', error);
+      console.error('message:', error?.message);
+      Alert.alert('Error', error?.message ?? 'Failed to save item.');
     }
-  };
-async function handleCreate() {
-  const finalName = name.trim();
-  const parsedContainerId = Array.isArray(containerId)
-    ? Number(containerId[0])
-    : Number(containerId);
-
-  if (!finalName) {
-    Alert.alert('Missing name', 'Please enter an item name.');
-    return;
-  }
-
-  if (!photo?.uri) {
-    Alert.alert('Missing Image', 'Please take a picture first.');
-    return;
-  }
-
-  if (!containerId || Number.isNaN(parsedContainerId)) {
-    Alert.alert('Error', 'Missing or invalid container ID.');
-    return;
-  }
-
-  try {
-    const savedFile = await savePhotoToScimFolder(photo.uri);
-
-    const { description, embedding } = await generateEmbeddingFromImage(savedFile.uri);
-
-    insertItem(
-      finalName || description,
-      savedFile.uri,
-      parsedContainerId,
-      embedding
-    );
-
-    router.back();
-  } catch (error: any) {
-    console.error('Failed to create item:', error);
-    console.error('message:', error?.message);
-    Alert.alert('Error', error?.message ?? 'Failed to save item.');
-  }
-}
-
-  if (!permission) return <View />;
-
-  if (!permission.granted) {
-    return (
-      <View style={styles.permissionContainer}>
-        <ThemedText>We need camera permission</ThemedText>
-        <TouchableOpacity
-          style={styles.permissionButton}
-          onPress={requestPermission}
-        >
-          <ThemedText style={{ color: 'white' }}>
-            Grant Permission
-          </ThemedText>
-        </TouchableOpacity>
-      </View>
-    );
   }
 
   if (showCamera) {
     return (
-      <View style={{ flex: 1 }}>
-        <CameraView
-          style={{ flex: 1 }}
-          facing="back"
-          ref={cameraRef}
-          flash={flash}
-        />
-
-        <View style={styles.cameraControls}>
-          <TouchableOpacity
-            style={styles.smallButton}
-            onPress={() =>
-              setFlash(flash === 'off' ? 'on' : 'off')
-            }
-          >
-            <ThemedText style={{ color: 'white' }}>
-              {flash === 'off' ? 'Flash Off' : 'Flash On'}
-            </ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.captureButton}
-            onPress={handleTakePhoto}
-          />
-        </View>
-      </View>
+      <ScimCamera
+        onPhotoTaken={(newPhoto) => {
+          setPhoto(newPhoto);
+          setShowCamera(false);
+        }}
+        onCancel={() => setShowCamera(false)}
+      />
     );
   }
 
@@ -162,14 +90,18 @@ async function handleCreate() {
         onChangeText={setName}
         style={styles.input}
       />
+
       <Picker
         selectedValue={value}
         onValueChange={(itemValue) => setValue(itemValue)}
         style={styles.picker}
       >
-        
         {itemData.map((item, index) => (
-          <Picker.Item key={index} label={item.label} value={item.label} />
+          <Picker.Item
+            key={index}
+            label={item.label}
+            value={item.label}
+          />
         ))}
       </Picker>
 
@@ -200,7 +132,6 @@ async function handleCreate() {
     </ThemedView>
   );
 }
-
 
 const styles = StyleSheet.create({
   container: {
@@ -246,40 +177,5 @@ const styles = StyleSheet.create({
   picker: {
     height: 50,
     width: '100%',
-  },
-
-  permissionContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-  },
-
-  permissionButton: {
-    backgroundColor: '#4F46E5',
-    padding: 14,
-    borderRadius: 10,
-  },
-
-  cameraControls: {
-    position: 'absolute',
-    bottom: 50,
-    width: '100%',
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-  },
-  smallButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 20,
-  },
-
-  captureButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'white',
   },
 });

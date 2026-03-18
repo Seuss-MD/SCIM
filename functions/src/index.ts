@@ -2,10 +2,14 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import OpenAI from "openai";
 
-const openAiKey = defineSecret("OPENAI_API_KEY");
+const OPENAI_API_KEY = defineSecret("OPENAI_API_KEY");
+
+function getClient() {
+  return new OpenAI({ apiKey: OPENAI_API_KEY.value() });
+}
 
 export const generateDescription = onCall(
-  { secrets: [openAiKey] },
+  { secrets: [OPENAI_API_KEY] },
   async (request) => {
     const { imageUrl } = request.data as { imageUrl?: string };
 
@@ -13,7 +17,7 @@ export const generateDescription = onCall(
       throw new HttpsError("invalid-argument", "imageUrl is required");
     }
 
-    const openai = new OpenAI({ apiKey: openAiKey.value() });
+    const openai = getClient();
 
     const resp = await openai.responses.create({
       model: "gpt-4.1-mini",
@@ -39,7 +43,6 @@ export const generateDescription = onCall(
     });
 
     const description = resp.output_text?.trim() ?? "";
-
     if (!description) {
       throw new HttpsError("internal", "Failed to generate description");
     }
@@ -49,7 +52,7 @@ export const generateDescription = onCall(
 );
 
 export const generateEmbedding = onCall(
-  { secrets: [openAiKey] },
+  { secrets: [OPENAI_API_KEY] },
   async (request) => {
     const { text } = request.data as { text?: string };
 
@@ -57,7 +60,7 @@ export const generateEmbedding = onCall(
       throw new HttpsError("invalid-argument", "text is required");
     }
 
-    const openai = new OpenAI({ apiKey: openAiKey.value() });
+    const openai = getClient();
 
     const emb = await openai.embeddings.create({
       model: "text-embedding-3-small",
@@ -69,7 +72,7 @@ export const generateEmbedding = onCall(
 );
 
 export const generateImageEmbedding = onCall(
-  { secrets: [openAiKey] },
+  { secrets: [OPENAI_API_KEY] },
   async (request) => {
     const { imageUrl } = request.data as { imageUrl?: string };
 
@@ -77,7 +80,7 @@ export const generateImageEmbedding = onCall(
       throw new HttpsError("invalid-argument", "imageUrl is required");
     }
 
-    const openai = new OpenAI({ apiKey: openAiKey.value() });
+    const openai = getClient();
 
     const vision = await openai.responses.create({
       model: "gpt-4.1-mini",
@@ -103,7 +106,6 @@ export const generateImageEmbedding = onCall(
     });
 
     const description = vision.output_text?.trim() ?? "";
-
     if (!description) {
       throw new HttpsError("internal", "Failed to generate description");
     }
