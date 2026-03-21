@@ -86,6 +86,20 @@ export function insertItem(
   );
 }
 
+export function updateItem(
+  id: number,
+  name: string,
+  description: string | null,
+  containerId: number | null
+) {
+  db.runSync(
+    `UPDATE items
+     SET name = ?, description = ?, container_id = ?
+     WHERE id = ?`,
+    [name, description, containerId, id]
+  );
+}
+
 export function deleteItem(id: number) {
   db.runSync(`DELETE FROM items WHERE id = ?`, [id]);
 }

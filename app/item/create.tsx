@@ -45,7 +45,7 @@ export default function CreateItem() {
     }
 
     if (!containerId || Number.isNaN(parsedContainerId)) {
-      Alert.alert('Error', 'Missing or invalid container ID.');
+      Alert.alert('Intregration Error', 'Missing or invalid container ID.');
       return;
     }
 

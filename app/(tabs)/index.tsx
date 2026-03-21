@@ -20,7 +20,7 @@ import {
   type ContainerSearchResult,
   type ItemSearchResult,
 } from '@/components/database';
-import { generateEmbeddingFromText } from '@/components/aiTools';
+import { generateEmbeddingFromText, generateEmbeddingFromImage } from '@/components/aiTools';
 import { Ionicons } from '@expo/vector-icons';
 
 type SearchMode = 'items' | 'containers';
@@ -39,7 +39,7 @@ export default function HomeScreen() {
   const [itemResults, setItemResults] = useState<ItemSearchResult[]>([]);
   const [containerResults, setContainerResults] = useState<ContainerSearchResult[]>([]);
 
-  async function handleSearch() {
+  async function handleTextSearch() {
     const trimmed = query.trim();
     if (!trimmed) return;
 
@@ -60,6 +60,32 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('Search failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImageSearch(imageUri?: string) {
+    const uriToSearch = imageUri ?? photo?.uri;
+    if (!uriToSearch) return;
+
+    try {
+      setLoading(true);
+      setSearched(true);
+
+      const { embedding } = await generateEmbeddingFromImage(uriToSearch);
+
+      if (mode === 'items') {
+        const results = searchItemsByEmbedding(embedding, undefined, 20);
+        setItemResults(results);
+        setContainerResults([]);
+      } else {
+        const results = searchContainersByEmbedding(embedding, 20);
+        setContainerResults(results);
+        setItemResults([]);
+      }
+    } catch (error) {
+      console.error('Image search failed:', error);
     } finally {
       setLoading(false);
     }
@@ -109,17 +135,18 @@ export default function HomeScreen() {
     );
   }
 
-  if (showCamera) {
-    return (
-      <ScimCamera
-        onPhotoTaken={(capturedPhoto: PhotoResult) => {
-          setPhoto(capturedPhoto);
-          setShowCamera(false);
-        }}
-        onCancel={() => setShowCamera(false)}
-      />
-    );
-  }
+if (showCamera) {
+  return (
+    <ScimCamera
+      onPhotoTaken={async (capturedPhoto: PhotoResult) => {
+        setPhoto(capturedPhoto);
+        setShowCamera(false);
+        await handleImageSearch(capturedPhoto.uri);
+      }}
+      onCancel={() => setShowCamera(false)}
+    />
+  );
+}
 
   return (
     <ThemedView style={styles.container}>
@@ -135,11 +162,11 @@ export default function HomeScreen() {
               placeholderTextColor="#9CA3AF"
               style={styles.input}
               returnKeyType="search"
-              onSubmitEditing={handleSearch}
+              onSubmitEditing={handleTextSearch}
             />
 
             <TouchableOpacity
-              onPress={handleSearch}
+              onPress={handleTextSearch}
               style={styles.searchIconButton}
               activeOpacity={0.8}
             >
@@ -152,7 +179,7 @@ export default function HomeScreen() {
             activeOpacity={0.8}
             onPress={() => setShowCamera(true)}
           >
-            <Ionicons name="camera-outline" size={20} color="#111827" />
+            <Ionicons name="camera-outline" size={20} color="#3d5a98" />
             <ThemedText style={styles.imageModeButtonText}>
               {photo ? 'Retake Image' : 'Image Search'}
             </ThemedText>

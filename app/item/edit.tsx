@@ -84,7 +84,7 @@ export default function ItemDetail() {
 
             <View style={styles.infoCard}>
               <ThemedText style={styles.label}>Description</ThemedText>
-              <ThemedText style={styles.description}>{item.description?.trim() || 'No description available.'}</ThemedText>
+              <ThemedText>{item.description?.trim() || 'No description available.'}</ThemedText>
             </View>
 
             <View style={styles.infoCard}>
@@ -195,8 +195,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
     fontSize: 16,
-  },
-  description: {
-    color: '#4B5563',
   },
 });
