@@ -1,3 +1,4 @@
+// app/item/[id].tsx
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet, Image, Alert, TouchableOpacity, View } from 'react-native';
@@ -26,6 +27,7 @@ export default function ItemDetail() {
 
     const itemId = Number(id);
     const foundItem = getItemById(itemId);
+    
 
     if (!foundItem) {
       navigation.setOptions({ title: 'Item Not Found' });
@@ -113,8 +115,10 @@ export default function ItemDetail() {
 
             <TouchableOpacity
               style={styles.editButton}
-              onPress={() => router.push(`/item/edit/${item.id}`)}
-            >
+              onPress={() => router.push({
+                      pathname: '/item/edit',
+                      params: { id: String(item.id) },
+            })}>
               <ThemedText style={styles.buttonText}>Edit Item</ThemedText>
             </TouchableOpacity>
 

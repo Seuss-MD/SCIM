@@ -1,46 +1,68 @@
+// app/item/edit.tsx
 import { useLocalSearchParams, useNavigation, useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { StyleSheet, Image, Alert, TouchableOpacity, View } from 'react-native';
+import {
+  StyleSheet,
+  Image,
+  Alert,
+  TouchableOpacity,
+  View,
+  TextInput,
+} from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
   getItemById,
-  deleteItem,
-  getContainerById,
+  updateItem,
+  getAllContainers,
   type Item,
   type Container,
 } from '@/components/database';
 
-export default function ItemDetail() {
-  const { id } = useLocalSearchParams();
+export default function EditItemPage() {
+  const params = useLocalSearchParams();
   const navigation = useNavigation();
   const router = useRouter();
 
+  const itemId = Number(params.id);
+
   const [item, setItem] = useState<Item | null>(null);
-  const [container, setContainer] = useState<Container | null>(null);
+  const [allContainers, setAllContainers] = useState<Container[]>([]);
+  const [editedName, setEditedName] = useState('');
+  const [editedDescription, setEditedDescription] = useState('');
+  const [selectedContainerId, setSelectedContainerId] = useState<number | null>(null);
+
+  const selectedContainer =
+    selectedContainerId == null
+      ? null
+      : allContainers.find((c) => c.id === selectedContainerId) ?? null;
 
   const loadItem = useCallback(() => {
-    if (!id) return;
+    if (!itemId) return;
 
-    const itemId = Number(id);
     const foundItem = getItemById(itemId);
-
     if (!foundItem) {
       navigation.setOptions({ title: 'Item Not Found' });
       return;
     }
 
-    setItem(foundItem);
-    navigation.setOptions({ title: foundItem.name || 'Item' });
+    const containers = getAllContainers();
 
-    if (foundItem.container_id != null) {
-      setContainer(getContainerById(foundItem.container_id));
+    setItem(foundItem);
+    setAllContainers(containers);
+    setEditedName(foundItem.name ?? '');
+    setEditedDescription(foundItem.description ?? '');
+    navigation.setOptions({ title: `Edit ${foundItem.name || 'Item'}` });
+
+    if (params.selectedContainerId !== undefined) {
+      const raw = String(params.selectedContainerId);
+      setSelectedContainerId(raw === 'none' ? null : Number(raw));
     } else {
-      setContainer(null);
+      setSelectedContainerId(foundItem.container_id ?? null);
     }
-  }, [id, navigation]);
+  }, [itemId, navigation, params.selectedContainerId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -48,24 +70,32 @@ export default function ItemDetail() {
     }, [loadItem])
   );
 
-  const handleDelete = () => {
+  const handleSave = () => {
     if (!item) return;
 
-    Alert.alert(
-      'Delete Item',
-      'Are you sure you want to delete this item?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteItem(item.id);
-            router.back();
-          },
-        },
-      ]
+    const trimmedName = editedName.trim();
+    const trimmedDescription = editedDescription.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Missing name', 'Please enter a name for the item.');
+      return;
+    }
+
+    updateItem(
+      item.id,
+      trimmedName,
+      trimmedDescription ? trimmedDescription : null,
+      selectedContainerId
     );
+
+    router.replace({
+      pathname: '/item/[id]',
+      params: { id: String(item.id) },
+    });
+  };
+
+  const handleCancel = () => {
+    router.back();
   };
 
   return (
@@ -80,49 +110,91 @@ export default function ItemDetail() {
       <ThemedView style={styles.container}>
         {item && (
           <>
-            <ThemedText type="title">{item.name}</ThemedText>
+            <ThemedText style={styles.label}>Name</ThemedText>
+            <TextInput
+              value={editedName}
+              onChangeText={setEditedName}
+              style={styles.input}
+              placeholder="Item name"
+              placeholderTextColor="#9CA3AF"
+            />
 
-            <View style={styles.infoCard}>
-              <ThemedText style={styles.label}>Description</ThemedText>
-              <ThemedText>{item.description?.trim() || 'No description available.'}</ThemedText>
-            </View>
+            <ThemedText style={styles.label}>Description</ThemedText>
+            <TextInput
+              value={editedDescription}
+              onChangeText={setEditedDescription}
+              style={[styles.input, styles.textArea]}
+              placeholder="Item description"
+              placeholderTextColor="#9CA3AF"
+              multiline
+            />
 
-            <View style={styles.infoCard}>
-              <ThemedText style={styles.label}>Container</ThemedText>
-              {container ? (
-                <TouchableOpacity
-                  style={styles.containerPreview}
-                  onPress={() => router.push(`/container/${container.id}`)}
-                  activeOpacity={0.8}
-                >
-                  {container.image_uri ? (
-                    <Image source={{ uri: container.image_uri }} style={styles.containerImage} />
+            <ThemedText style={styles.label}>Container</ThemedText>
+            <TouchableOpacity
+              style={styles.infoCard}
+              activeOpacity={0.8}
+              onPress={() =>
+                router.push({
+                  pathname: '/item/select-container',
+                  params: {
+                    itemId: String(item.id),
+                    selectedContainerId:
+                      selectedContainerId == null ? 'none' : String(selectedContainerId),
+                  },
+                })
+              }
+            >
+              {selectedContainer ? (
+                <View style={styles.containerPreview}>
+                  {selectedContainer.image_uri ? (
+                    <Image
+                      source={{ uri: selectedContainer.image_uri }}
+                      style={styles.containerImage}
+                    />
                   ) : (
-                    <View style={[styles.containerImage, styles.containerImagePlaceholder]} />
+                    <View
+                      style={[
+                        styles.containerImage,
+                        styles.containerImagePlaceholder,
+                      ]}
+                    />
                   )}
 
                   <View style={styles.containerPreviewText}>
-                    <ThemedText style={styles.linkText}>{container.name}</ThemedText>
-                    <ThemedText style={styles.containerHint}>Tap to open container</ThemedText>
+                    <ThemedText style={styles.containerName}>
+                      {selectedContainer.name}
+                    </ThemedText>
+                    <ThemedText style={styles.containerHint}>
+                      Tap to choose a different container
+                    </ThemedText>
                   </View>
-                </TouchableOpacity>
+                </View>
               ) : (
-                <ThemedText>Not in a container</ThemedText>
+                <View style={styles.containerPreview}>
+                  <View
+                    style={[
+                      styles.containerImage,
+                      styles.containerImagePlaceholder,
+                    ]}
+                  />
+                  <View style={styles.containerPreviewText}>
+                    <ThemedText style={styles.containerName}>
+                      No Container
+                    </ThemedText>
+                    <ThemedText style={styles.containerHint}>
+                      Tap to choose a container
+                    </ThemedText>
+                  </View>
+                </View>
               )}
-            </View>
-
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => router.push(`/item/edit/${item.id}`)}
-            >
-              <ThemedText style={styles.buttonText}>Edit Item</ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={handleDelete}
-            >
-              <ThemedText style={styles.buttonText}>Delete Item</ThemedText>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              <ThemedText style={styles.buttonText}>Save Changes</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
+              <ThemedText style={styles.buttonText}>Cancel</ThemedText>
             </TouchableOpacity>
           </>
         )}
@@ -141,16 +213,30 @@ const styles = StyleSheet.create({
     height: '100%',
     position: 'absolute',
   },
+  label: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#111827',
+  },
+  textArea: {
+    minHeight: 110,
+    textAlignVertical: 'top',
+  },
   infoCard: {
     padding: 14,
     borderRadius: 12,
     backgroundColor: '#F3F4F6',
     gap: 6,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#374151',
   },
   containerPreview: {
     flexDirection: 'row',
@@ -170,25 +256,25 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  linkText: {
-    color: '#2563EB',
-    fontWeight: '600',
+  containerName: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
   },
   containerHint: {
     fontSize: 13,
     color: '#6B7280',
   },
-  editButton: {
+  saveButton: {
     padding: 14,
     borderRadius: 12,
-    backgroundColor: '#2563EB',
+    backgroundColor: '#059669',
     alignItems: 'center',
   },
-  deleteButton: {
+  cancelButton: {
     padding: 14,
     borderRadius: 12,
-    backgroundColor: '#DC2626',
+    backgroundColor: '#6B7280',
     alignItems: 'center',
   },
   buttonText: {
