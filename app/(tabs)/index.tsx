@@ -4,40 +4,38 @@ import {
   FlatList,
   Image,
   StyleSheet,
-  Switch,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Alert } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import ScimCamera from '@/components/ScimCam';
 import {
-  searchContainersByEmbedding,
   searchItemsByEmbedding,
-  type ContainerSearchResult,
   type ItemSearchResult,
 } from '@/components/database';
-import { generateEmbeddingFromText, generateEmbeddingFromImage } from '@/components/aiTools';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  generateEmbeddingFromText,
+  generateEmbeddingFromImage,
+} from '@/components/aiTools';
+import * as ImagePicker from 'expo-image-picker';
 
-type SearchMode = 'items' | 'containers';
 type SearchInputMode = 'text' | 'image';
 type PhotoResult = { uri: string };
 
 export default function HomeScreen() {
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<SearchMode>('items');
-  const [inputMode, setInputMode] = useState<SearchInputMode>('text');
+  const [inputMode, setInputMode] = useState<SearchInputMode>('image');
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [photo, setPhoto] = useState<PhotoResult | null>(null);
-
   const [itemResults, setItemResults] = useState<ItemSearchResult[]>([]);
-  const [containerResults, setContainerResults] = useState<ContainerSearchResult[]>([]);
 
   async function handleTextSearch() {
     const trimmed = query.trim();
@@ -48,16 +46,8 @@ export default function HomeScreen() {
       setSearched(true);
 
       const queryEmbedding = await generateEmbeddingFromText(trimmed);
-
-      if (mode === 'items') {
-        const results = searchItemsByEmbedding(queryEmbedding, undefined, 20);
-        setItemResults(results);
-        setContainerResults([]);
-      } else {
-        const results = searchContainersByEmbedding(queryEmbedding, 20);
-        setContainerResults(results);
-        setItemResults([]);
-      }
+      const results = searchItemsByEmbedding(queryEmbedding, undefined, 20);
+      setItemResults(results);
     } catch (error) {
       console.error('Search failed:', error);
     } finally {
@@ -65,6 +55,34 @@ export default function HomeScreen() {
     }
   }
 
+  async function handlePickImage() {
+  try {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      Alert.alert(
+        'Permission required',
+        'Permission to access the photo library is required.'
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 1,
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+
+    const selectedPhoto = { uri: result.assets[0].uri };
+    setPhoto(selectedPhoto);
+    await handleImageSearch(selectedPhoto.uri);
+  } catch (error) {
+    console.error('Image import failed:', error);
+    Alert.alert('Error', 'Could not import image.');
+  }
+}
   async function handleImageSearch(imageUri?: string) {
     const uriToSearch = imageUri ?? photo?.uri;
     if (!uriToSearch) return;
@@ -74,16 +92,8 @@ export default function HomeScreen() {
       setSearched(true);
 
       const { embedding } = await generateEmbeddingFromImage(uriToSearch);
-
-      if (mode === 'items') {
-        const results = searchItemsByEmbedding(embedding, undefined, 20);
-        setItemResults(results);
-        setContainerResults([]);
-      } else {
-        const results = searchContainersByEmbedding(embedding, 20);
-        setContainerResults(results);
-        setItemResults([]);
-      }
+      const results = searchItemsByEmbedding(embedding, undefined, 20);
+      setItemResults(results);
     } catch (error) {
       console.error('Image search failed:', error);
     } finally {
@@ -96,16 +106,21 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.card}
         onPress={() => router.push(`/item/${item.id}`)}
+        activeOpacity={0.85}
       >
         {item.image_uri ? (
-          <Image source={{ uri: item.image_uri }} style={styles.image} />
+          <Image source={{ uri: item.image_uri }} style={styles.resultImage} />
         ) : (
-          <View style={[styles.image, styles.imagePlaceholder]} />
+          <View style={[styles.resultImage, styles.imagePlaceholder]}>
+            <Ionicons name="image-outline" size={24} color="#94A3B8" />
+          </View>
         )}
 
         <View style={styles.cardBody}>
-          <ThemedText style={styles.title}>{item.name || 'Unnamed Item'}</ThemedText>
-          <ThemedText style={styles.meta}>
+          <ThemedText style={styles.cardTitle}>
+            {item.name || 'Unnamed Item'}
+          </ThemedText>
+          <ThemedText style={styles.cardMeta}>
             Similarity: {(item.similarity * 100).toFixed(1)}%
           </ThemedText>
         </View>
@@ -113,115 +128,129 @@ export default function HomeScreen() {
     );
   }
 
-  function renderContainerResult({ item }: { item: ContainerSearchResult }) {
+  if (showCamera) {
     return (
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push(`/container/${item.id}`)}
-      >
-        {item.image_uri ? (
-          <Image source={{ uri: item.image_uri }} style={styles.image} />
-        ) : (
-          <View style={[styles.image, styles.imagePlaceholder]} />
-        )}
-
-        <View style={styles.cardBody}>
-          <ThemedText style={styles.title}>{item.name}</ThemedText>
-          <ThemedText style={styles.meta}>
-            Similarity: {(item.similarity * 100).toFixed(1)}%
-          </ThemedText>
-        </View>
-      </TouchableOpacity>
+      <ScimCamera
+        onPhotoTaken={async (capturedPhoto: PhotoResult) => {
+          setPhoto(capturedPhoto);
+          setShowCamera(false);
+          await handleImageSearch(capturedPhoto.uri);
+        }}
+        onCancel={() => setShowCamera(false)}
+      />
     );
   }
-
-if (showCamera) {
-  return (
-    <ScimCamera
-      onPhotoTaken={async (capturedPhoto: PhotoResult) => {
-        setPhoto(capturedPhoto);
-        setShowCamera(false);
-        await handleImageSearch(capturedPhoto.uri);
-      }}
-      onCancel={() => setShowCamera(false)}
-    />
-  );
-}
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText style={styles.header}>Search</ThemedText>
+      <View style={styles.hero}>
+        <ThemedText style={styles.logo}>SCIM</ThemedText>
 
-      <View style={styles.searchBox}>
         {inputMode === 'text' ? (
-          <View style={styles.searchInputWrapper}>
-            <TextInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder={`Search ${mode}...`}
-              placeholderTextColor="#9CA3AF"
-              style={styles.input}
-              returnKeyType="search"
-              onSubmitEditing={handleTextSearch}
+        <View style={styles.searchShell}>
+          <Ionicons
+            name="search-outline"
+            size={26}
+            color="#111111"
+            style={styles.searchIcon}
+          />
+
+          <View style={styles.searchDivider} />
+
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search for an Item"
+            placeholderTextColor="#9CA3AF"
+            style={styles.input}
+            returnKeyType="search"
+            onSubmitEditing={handleTextSearch}
+          />
+        </View>
+      ) : (
+        <View style={styles.imageActionRow}>
+          <TouchableOpacity
+            style={styles.imageSearchShell}
+            onPress={() => setShowCamera(true)}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="camera-outline"
+              size={26}
+              color="#111111"
+              style={styles.searchIcon}
             />
 
-            <TouchableOpacity
-              onPress={handleTextSearch}
-              style={styles.searchIconButton}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="search" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        ) : (
+            <View style={styles.searchDivider} />
+
+            <View style={styles.imageSearchTextWrap}>
+              <ThemedText style={styles.imageSearchText}>
+                {photo ? 'Retake image query' : 'Search by Image'}
+              </ThemedText>
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity
-            style={styles.imageModeButton}
-            activeOpacity={0.8}
-            onPress={() => setShowCamera(true)}
+            style={styles.importButton}
+            onPress={handlePickImage}
+            activeOpacity={0.85}
           >
-            <Ionicons name="camera-outline" size={20} color="#3d5a98" />
-            <ThemedText style={styles.imageModeButtonText}>
-              {photo ? 'Retake Image' : 'Image Search'}
+            <Ionicons name="images-outline" size={22} color="#111111" />
+          </TouchableOpacity>
+        </View>
+      )}
+
+        <View style={styles.segmentWrap}>
+          <TouchableOpacity
+            style={[
+              styles.segmentButton,
+              inputMode === 'image' && styles.segmentButtonActive,
+            ]}
+            onPress={() => setInputMode('image')}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="camera-outline"
+              size={16}
+              color={inputMode === 'image' ? '#FFFFFF' : '#334155'}
+            />
+            <ThemedText
+              style={[
+                styles.segmentText,
+                inputMode === 'image' && styles.segmentTextActive,
+              ]}
+            >
+              Image
             </ThemedText>
           </TouchableOpacity>
-        )}
 
-        <View style={styles.switchRow}>
-          <ThemedText style={styles.switchLabel}>Text</ThemedText>
-          <Switch
-            value={inputMode === 'image'}
-            onValueChange={(value) => setInputMode(value ? 'image' : 'text')}
-            trackColor={{ false: '#D1D5DB', true: '#93C5FD' }}
-            thumbColor={inputMode === 'image' ? '#2563EB' : '#FFFFFF'}
-          />
-          <ThemedText style={styles.switchLabel}>Image</ThemedText>
+          <TouchableOpacity
+            style={[
+              styles.segmentButton,
+              inputMode === 'text' && styles.segmentButtonActive,
+            ]}
+            onPress={() => setInputMode('text')}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="create-outline"
+              size={16}
+              color={inputMode === 'text' ? '#FFFFFF' : '#334155'}
+            />
+            <ThemedText
+              style={[
+                styles.segmentText,
+                inputMode === 'text' && styles.segmentTextActive,
+              ]}
+            >
+              Text
+            </ThemedText>
+          </TouchableOpacity>
         </View>
 
         {photo && inputMode === 'image' && (
           <Image source={{ uri: photo.uri }} style={styles.previewImage} />
         )}
-
-        <View style={styles.toggleRow}>
-          <TouchableOpacity
-            style={[styles.toggleButton, mode === 'items' && styles.toggleActive]}
-            onPress={() => setMode('items')}
-            activeOpacity={0.8}
-          >
-            <ThemedText style={[styles.toggleText, mode === 'items' && styles.toggleTextActive]}>
-              Items
-            </ThemedText>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toggleButton, mode === 'containers' && styles.toggleActive]}
-            onPress={() => setMode('containers')}
-            activeOpacity={0.8}
-          >
-            <ThemedText style={[styles.toggleText, mode === 'containers' && styles.toggleTextActive]}>
-              Containers
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {loading ? (
@@ -229,29 +258,17 @@ if (showCamera) {
           <ActivityIndicator size="large" />
           <ThemedText>Searching...</ThemedText>
         </View>
-      ) : !searched ? null : mode === 'items' ? (
-        itemResults.length > 0 ? (
-          <FlatList
-            data={itemResults}
-            keyExtractor={(item) => `item-${item.id}`}
-            renderItem={renderItemResult}
-            contentContainerStyle={styles.listContent}
-          />
-        ) : (
-          <View style={styles.centerState}>
-            <ThemedText>No items found.</ThemedText>
-          </View>
-        )
-      ) : containerResults.length > 0 ? (
+      ) : !searched ? null : itemResults.length > 0 ? (
         <FlatList
-          data={containerResults}
-          keyExtractor={(item) => `container-${item.id}`}
-          renderItem={renderContainerResult}
+          data={itemResults}
+          keyExtractor={(item) => `item-${item.id}`}
+          renderItem={renderItemResult}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
         />
       ) : (
         <View style={styles.centerState}>
-          <ThemedText>No containers found.</ThemedText>
+          <ThemedText>No items found.</ThemedText>
         </View>
       )}
     </ThemedView>
@@ -261,122 +278,144 @@ if (showCamera) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    gap: 14,
+    backgroundColor: '#F6F6F6',
+    paddingHorizontal: 18,
+    paddingTop: 48,
   },
-  header: {
-    fontSize: 34,
-    fontWeight: '700',
-    lineHeight: 38,
-    alignSelf: 'center',
+  hero: {
+    alignItems: 'center',
+    marginTop: 26,
   },
-  searchBox: {
+  logo: {
+    fontSize: 44,
+    color: '#5B5CEB',
+    fontWeight: '500',
+    fontFamily: 'Georgia',
+    marginBottom: 42,
+    lineHeight: 44,
+  },
+  segmentWrap: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 999,
+    padding: 4,
+    gap: 4,
     width: '100%',
-    maxWidth: 520,
-    alignSelf: 'center',
-    gap: 12,
+    maxWidth: 260,
+    marginTop: 16,
+    marginBottom: 8,
   },
-  searchInputWrapper: {
+  segmentButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  segmentButtonActive: {
+    backgroundColor: '#5B5CEB',
+  },
+  segmentText: {
+    fontWeight: '700',
+    color: '#334155',
+  },
+  segmentTextActive: {
+    color: '#FFFFFF',
+  },
+  searchShell: {
+    width: '100%',
+    maxWidth: 360,
+    minHeight: 58,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#2F2F2F',
+    backgroundColor: '#F6F6F6',
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    paddingLeft: 16,
-    paddingRight: 8,
-    minHeight: 56,
+    paddingHorizontal: 14,
+  },
+ imageSearchShell: {
+    flex: 1,
+    minHeight: 58,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#2F2F2F',
+    backgroundColor: '#F6F6F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#8B8B8B',
+    marginRight: 12,
+    opacity: 0.7,
+  },
+  imageActionRow: {
+    width: '100%',
+    maxWidth: 360,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  importButton: {
+    width: 58,
+    minHeight: 58,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#2F2F2F',
+    backgroundColor: '#F6F6F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,
+    fontSize: 15,
+    color: '#111111',
     paddingVertical: 12,
-    paddingRight: 10,
-    color: '#000000',
-    fontSize: 16,
   },
-  searchIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
+  imageSearchTextWrap: {
+    flex: 1,
     justifyContent: 'center',
   },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 4,
-  },
-  switchLabel: {
-    fontWeight: '600',
-    color: '#AAAAAA',
-  },
-  imageModeButton: {
-    minHeight: 56,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-  },
-  imageModeButtonText: {
-    fontWeight: '600',
-    color: '#111827',
+  imageSearchText: {
+    fontSize: 15,
+    color: '#111111',
   },
   previewImage: {
     width: '100%',
+    maxWidth: 360,
     height: 180,
-    borderRadius: 16,
+    borderRadius: 18,
+    marginTop: 16,
     backgroundColor: '#E5E7EB',
   },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  toggleButton: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 14,
-    alignItems: 'center',
-    backgroundColor: '#E5EAF1',
-  },
-  toggleActive: {
-    backgroundColor: '#2563EB',
-  },
-  toggleText: {
-    fontWeight: '600',
-    color: '#1F2937',
-  },
-  toggleTextActive: {
-    color: '#FFFFFF',
-  },
   listContent: {
+    paddingTop: 28,
     paddingBottom: 24,
-    paddingTop: 6,
-    gap: 12,
   },
   card: {
     flexDirection: 'row',
     gap: 12,
     padding: 12,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E5E7EB',
     marginBottom: 12,
   },
-  image: {
+  resultImage: {
     width: 76,
     height: 76,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   imagePlaceholder: {
     opacity: 0.6,
@@ -386,21 +425,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  title: {
+  cardTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
   },
-  meta: {
+  cardMeta: {
     fontSize: 14,
-    opacity: 0.7,
-    color: '#4B5563',
+    color: '#6B7280',
   },
   centerState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
 });
