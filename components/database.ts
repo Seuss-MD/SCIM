@@ -17,6 +17,7 @@ export type Item = {
   image_uri: string;
   container_id: number | null;
   embedding: string | null;
+  tags: string | null; // NEW
   created_at: string;
 };
 
@@ -36,34 +37,22 @@ export function initDatabase() {
       image_uri TEXT NOT NULL,
       container_id INTEGER,
       embedding TEXT,
+      tags TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (container_id) REFERENCES containers (id)
     );
   `);
 
-  try {
-    db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`);
-  } catch {}
+  // Containers
+  try { db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`); } catch {}
+  try { db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`); } catch {}
 
-  try {
-    db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`);
-  } catch {}
-
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN description TEXT;`);
-  } catch {}
-
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`);
-  } catch {}
-
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`);
-  } catch {}
-
-  try {
-    db.execSync(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
-  } catch {}
+  // Items
+  try { db.execSync(`ALTER TABLE items ADD COLUMN description TEXT;`); } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`); } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`); } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN tags TEXT;`); } catch {}
+  try { db.execSync(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`); } catch {}
 }
 
 export function insertItem(
@@ -71,17 +60,19 @@ export function insertItem(
   description: string | null,
   imageUri: string,
   containerId: number | null,
-  embedding: number[] | null
+  embedding: number[] | null,
+  tags: string[] = []
 ) {
   db.runSync(
-    `INSERT INTO items (name, description, image_uri, container_id, embedding)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO items (name, description, image_uri, container_id, embedding, tags)
+     VALUES (?, ?, ?, ?, ?, ?)`,
     [
       name,
       description,
       imageUri,
       containerId,
       embedding ? JSON.stringify(embedding) : null,
+      JSON.stringify(tags),
     ]
   );
 }
@@ -90,13 +81,14 @@ export function updateItem(
   id: number,
   name: string,
   description: string | null,
-  containerId: number | null
+  containerId: number | null,
+  tags: string[] = []
 ) {
   db.runSync(
     `UPDATE items
-     SET name = ?, description = ?, container_id = ?
+     SET name = ?, description = ?, container_id = ?, tags = ?
      WHERE id = ?`,
-    [name, description, containerId, id]
+    [name, description, containerId, JSON.stringify(tags), id]
   );
 }
 
@@ -149,6 +141,17 @@ function parseEmbedding(value: string | null): number[] | null {
     return Array.isArray(parsed) ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+// NEW helper for tags
+export function parseTags(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
   }
 }
 
