@@ -1,15 +1,17 @@
 // app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initDatabase } from '@/components/database';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme() ?? 'light';
+  const theme = Colors[colorScheme];
 
   useEffect(() => {
     initDatabase();
@@ -18,16 +20,32 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
-      }}>
+        tabBarActiveTintColor: theme.tabIconSelected,
+        tabBarInactiveTintColor: theme.tabIconDefault,
+        tabBarShowLabel: true,
+        tabBarStyle: {
+          backgroundColor: theme.surface,
+          borderTopColor: theme.border,
+          borderTopWidth: 1,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="house.fill" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              size={24}
+              color={color}
+              name={focused ? 'home' : 'home-outline'}
+            />
           ),
         }}
       />
@@ -36,18 +54,12 @@ export default function TabLayout() {
         name="storage"
         options={{
           title: 'Storage',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="folder.fill" color={color} />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="camera"
-        options={{
-          title: 'Camera',
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="camera.fill" color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              size={24}
+              color={color}
+              name={focused ? 'folder' : 'folder-outline'}
+            />
           ),
         }}
       />
@@ -56,6 +68,13 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              size={24}
+              color={color}
+              name={focused ? 'person' : 'person-outline'}
+            />
+          ),
         }}
       />
     </Tabs>

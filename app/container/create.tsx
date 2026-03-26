@@ -6,8 +6,10 @@ import {
   View,
   Alert,
   Image,
+  useColorScheme,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
@@ -16,6 +18,7 @@ import ScimCamera from '@/components/ScimCam';
 import { insertContainer } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { generateEmbeddingFromImage } from '@/components/aiTools';
+import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 
 export default function CreateContainer() {
   const router = useRouter();
@@ -24,8 +27,14 @@ export default function CreateContainer() {
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const [showCamera, setShowCamera] = useState(false);
 
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
+
   async function handleCreate() {
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      Alert.alert('Missing Name', 'Please enter a container name.');
+      return;
+    }
 
     if (!photo?.uri) {
       Alert.alert('Missing Image', 'Please take a picture first.');
@@ -34,11 +43,9 @@ export default function CreateContainer() {
 
     try {
       const savedFile = await savePhotoToScimFolder(photo.uri);
-
       const { embedding } = await generateEmbeddingFromImage(savedFile.uri);
 
       insertContainer(name.trim(), savedFile.uri, embedding);
-
       router.back();
     } catch (error: any) {
       console.error('Failed to create container:', error);
@@ -60,80 +67,161 @@ export default function CreateContainer() {
   }
 
   return (
-    <ThemedView style={styles.container}>
-      <TextInput
-        placeholder="Container name"
-        value={name}
-        onChangeText={setName}
-        style={styles.input}
-      />
-
-      <TouchableOpacity
-        style={styles.imageButton}
-        onPress={() => setShowCamera(true)}
+    <ThemedView style={[styles.screen, { backgroundColor: theme.background }]}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.surface,
+            borderColor: theme.border,
+          },
+        ]}
       >
-        <ThemedText style={{ color: 'white' }}>
-          Take Photo
-        </ThemedText>
-      </TouchableOpacity>
+        <View style={styles.headerBlock}>
+          <ThemedText style={[styles.title, { color: theme.text }]}>
+            Create Container
+          </ThemedText>
+          <ThemedText style={[styles.subtitle, { color: theme.textMuted }]}>
+            Add a photo and name to save a new container.
+          </ThemedText>
+        </View>
 
-      {photo && (
-        <Image
-          source={{ uri: photo.uri }}
-          style={styles.preview}
+        <TextInput
+          placeholder="Container name"
+          placeholderTextColor={theme.textSoft}
+          value={name}
+          onChangeText={setName}
+          style={[
+            styles.input,
+            {
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              color: theme.text,
+            },
+          ]}
         />
-      )}
 
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={handleCreate}
-      >
-        <ThemedText style={styles.createText}>
-          Create Container
-        </ThemedText>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.imageButton,
+            {
+              backgroundColor: theme.secondary,
+              borderColor: theme.border,
+            },
+          ]}
+          onPress={() => setShowCamera(true)}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name="camera-outline"
+            size={18}
+            color={theme.secondaryText}
+            style={styles.buttonIcon}
+          />
+          <ThemedText style={[styles.imageButtonText, { color: theme.secondaryText }]}>
+            {photo ? 'Retake Photo' : 'Take Photo'}
+          </ThemedText>
+        </TouchableOpacity>
+
+        {photo && (
+          <Image
+            source={{ uri: photo.uri }}
+            style={[
+              styles.preview,
+              {
+                backgroundColor: theme.surfaceAlt,
+                borderColor: theme.border,
+              },
+            ]}
+          />
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.createButton,
+            {
+              backgroundColor: theme.primary,
+            },
+          ]}
+          onPress={handleCreate}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name="add-circle-outline"
+            size={18}
+            color={theme.primaryText}
+            style={styles.buttonIcon}
+          />
+          <ThemedText style={[styles.createText, { color: theme.primaryText }]}>
+            Create Container
+          </ThemedText>
+        </TouchableOpacity>
+      </View>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    padding: 20,
-    gap: 20,
+    padding: Spacing.xl,
   },
-
+  card: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.xl,
+    gap: Spacing.lg,
+    ...Shadows.card,
+  },
+  headerBlock: {
+    gap: 6,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#fff',
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    fontSize: 16,
   },
-
   imageButton: {
-    backgroundColor: '#2563EB',
-    padding: 14,
-    borderRadius: 10,
+    minHeight: 50,
+    borderRadius: Radius.md,
+    borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
-
+  imageButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
   preview: {
     width: '100%',
-    height: 200,
-    borderRadius: 12,
+    height: 220,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
   },
-
   createButton: {
-    backgroundColor: '#16A34A',
-    padding: 16,
-    borderRadius: 12,
+    minHeight: 52,
+    borderRadius: Radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
-
   createText: {
-    color: 'white',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 16,
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
 });

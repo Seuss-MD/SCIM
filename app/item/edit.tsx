@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   View,
   TextInput,
+  useColorScheme,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -20,6 +22,7 @@ import {
   type Item,
   type Container,
 } from '@/components/database';
+import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 
 export default function EditItemPage() {
   const params = useLocalSearchParams();
@@ -33,6 +36,9 @@ export default function EditItemPage() {
   const [editedName, setEditedName] = useState('');
   const [editedDescription, setEditedDescription] = useState('');
   const [selectedContainerId, setSelectedContainerId] = useState<number | null>(null);
+
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
   const selectedContainer =
     selectedContainerId == null
@@ -100,39 +106,87 @@ export default function EditItemPage() {
 
   return (
     <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
+      headerBackgroundColor={{
+        light: Colors.light.surfaceAlt,
+        dark: Colors.dark.surfaceAlt,
+      }}
       headerImage={
         item?.image_uri ? (
           <Image source={{ uri: item.image_uri }} style={styles.headerImage} />
-        ) : undefined
+        ) : (
+          <View
+            style={[
+              styles.headerPlaceholder,
+              { backgroundColor: theme.surfaceAlt },
+            ]}
+          >
+            <Ionicons
+              name="cube-outline"
+              size={52}
+              color={theme.textMuted}
+            />
+          </View>
+        )
       }
     >
-      <ThemedView style={styles.container}>
+      <ThemedView
+        style={[
+          styles.container,
+          { backgroundColor: theme.background },
+        ]}
+      >
         {item && (
           <>
-            <ThemedText style={styles.label}>Name</ThemedText>
+            <ThemedText style={[styles.label, { color: theme.textMuted }]}>
+              Name
+            </ThemedText>
             <TextInput
               value={editedName}
               onChangeText={setEditedName}
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
               placeholder="Item name"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.textSoft}
             />
 
-            <ThemedText style={styles.label}>Description</ThemedText>
+            <ThemedText style={[styles.label, { color: theme.textMuted }]}>
+              Description
+            </ThemedText>
             <TextInput
               value={editedDescription}
               onChangeText={setEditedDescription}
-              style={[styles.input, styles.textArea]}
+              style={[
+                styles.input,
+                styles.textArea,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                  color: theme.text,
+                },
+              ]}
               placeholder="Item description"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={theme.textSoft}
               multiline
             />
 
-            <ThemedText style={styles.label}>Container</ThemedText>
+            <ThemedText style={[styles.label, { color: theme.textMuted }]}>
+              Container
+            </ThemedText>
             <TouchableOpacity
-              style={styles.infoCard}
-              activeOpacity={0.8}
+              style={[
+                styles.infoCard,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
+              activeOpacity={0.85}
               onPress={() =>
                 router.push({
                   pathname: '/item/select-container',
@@ -156,18 +210,31 @@ export default function EditItemPage() {
                       style={[
                         styles.containerImage,
                         styles.containerImagePlaceholder,
+                        { backgroundColor: theme.surfaceAlt },
                       ]}
-                    />
+                    >
+                      <Ionicons
+                        name="folder-open-outline"
+                        size={24}
+                        color={theme.textMuted}
+                      />
+                    </View>
                   )}
 
                   <View style={styles.containerPreviewText}>
-                    <ThemedText style={styles.containerName}>
+                    <ThemedText style={[styles.containerName, { color: theme.text }]}>
                       {selectedContainer.name}
                     </ThemedText>
-                    <ThemedText style={styles.containerHint}>
+                    <ThemedText style={[styles.containerHint, { color: theme.textMuted }]}>
                       Tap to choose a different container
                     </ThemedText>
                   </View>
+
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={theme.textMuted}
+                  />
                 </View>
               ) : (
                 <View style={styles.containerPreview}>
@@ -175,26 +242,77 @@ export default function EditItemPage() {
                     style={[
                       styles.containerImage,
                       styles.containerImagePlaceholder,
+                      {
+                        backgroundColor: theme.surfaceAlt,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      },
                     ]}
-                  />
+                  >
+                    <Ionicons
+                      name="folder-open-outline"
+                      size={24}
+                      color={theme.textMuted}
+                    />
+                  </View>
+
                   <View style={styles.containerPreviewText}>
-                    <ThemedText style={styles.containerName}>
+                    <ThemedText style={[styles.containerName, { color: theme.text }]}>
                       No Container
                     </ThemedText>
-                    <ThemedText style={styles.containerHint}>
+                    <ThemedText style={[styles.containerHint, { color: theme.textMuted }]}>
                       Tap to choose a container
                     </ThemedText>
                   </View>
+
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={theme.textMuted}
+                  />
                 </View>
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <ThemedText style={styles.buttonText}>Save Changes</ThemedText>
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                { backgroundColor: theme.primary },
+              ]}
+              onPress={handleSave}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="save-outline"
+                size={18}
+                color={theme.primaryText}
+                style={styles.buttonIcon}
+              />
+              <ThemedText style={[styles.buttonText, { color: theme.primaryText }]}>
+                Save Changes
+              </ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-              <ThemedText style={styles.buttonText}>Cancel</ThemedText>
+            <TouchableOpacity
+              style={[
+                styles.cancelButton,
+                {
+                  backgroundColor: theme.secondary,
+                  borderColor: theme.border,
+                },
+              ]}
+              onPress={handleCancel}
+              activeOpacity={0.85}
+            >
+              <Ionicons
+                name="close-outline"
+                size={18}
+                color={theme.secondaryText}
+                style={styles.buttonIcon}
+              />
+              <ThemedText style={[styles.buttonText, { color: theme.secondaryText }]}>
+                Cancel
+              </ThemedText>
             </TouchableOpacity>
           </>
         )}
@@ -205,28 +323,31 @@ export default function EditItemPage() {
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    gap: 12,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
   headerImage: {
     width: '100%',
     height: '100%',
     position: 'absolute',
   },
+  headerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#374151',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.md,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
-    color: '#111827',
   },
   textArea: {
     minHeight: 110,
@@ -234,9 +355,10 @@ const styles = StyleSheet.create({
   },
   infoCard: {
     padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    borderRadius: Radius.md,
+    borderWidth: 1,
     gap: 6,
+    ...Shadows.card,
   },
   containerPreview: {
     flexDirection: 'row',
@@ -247,10 +369,9 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 12,
-    backgroundColor: '#E5E7EB',
   },
   containerImagePlaceholder: {
-    opacity: 0.6,
+    opacity: 0.9,
   },
   containerPreviewText: {
     flex: 1,
@@ -258,28 +379,32 @@ const styles = StyleSheet.create({
   },
   containerName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: '700',
   },
   containerHint: {
     fontSize: 13,
-    color: '#6B7280',
   },
   saveButton: {
     padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#059669',
+    borderRadius: Radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 4,
   },
   cancelButton: {
     padding: 14,
-    borderRadius: 12,
-    backgroundColor: '#6B7280',
+    borderRadius: Radius.md,
+    borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   buttonText: {
-    color: 'white',
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 16,
   },
 });

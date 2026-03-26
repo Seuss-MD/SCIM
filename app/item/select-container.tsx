@@ -1,11 +1,20 @@
 // app/item/select-container.tsx
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, TouchableOpacity, Image, View, FlatList } from 'react-native';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  View,
+  FlatList,
+  useColorScheme,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { getAllContainers, type Container } from '@/components/database';
+import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 
 export default function SelectContainerPage() {
   const { itemId, selectedContainerId } = useLocalSearchParams();
@@ -13,6 +22,9 @@ export default function SelectContainerPage() {
   const router = useRouter();
 
   const [containers, setContainers] = useState<Container[]>([]);
+
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
   useEffect(() => {
     navigation.setOptions({ title: 'Select Container' });
@@ -34,50 +46,105 @@ export default function SelectContainerPage() {
     });
   };
 
-  return (
-    <ThemedView style={styles.container}>
-      <TouchableOpacity
-        style={[
-          styles.card,
-          currentSelectedId === null && styles.selectedCard,
-        ]}
-        onPress={() => handleSelect(null)}
-        activeOpacity={0.8}
-      >
-        <View style={[styles.image, styles.imagePlaceholder]} />
-        <View style={styles.cardBody}>
-          <ThemedText style={styles.title}>No Container</ThemedText>
-          <ThemedText style={styles.meta}>Remove item from container</ThemedText>
+  const renderCard = (
+    title: string,
+    meta: string,
+    selected: boolean,
+    onPress: () => void,
+    imageUri?: string | null
+  ) => (
+    <TouchableOpacity
+      style={[
+        styles.card,
+        {
+          backgroundColor: selected ? theme.secondary : theme.surface,
+          borderColor: selected ? theme.primary : theme.border,
+        },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      {imageUri ? (
+        <Image
+          source={{ uri: imageUri }}
+          style={[
+            styles.image,
+            { backgroundColor: theme.surfaceAlt },
+          ]}
+        />
+      ) : (
+        <View
+          style={[
+            styles.image,
+            styles.imagePlaceholder,
+            { backgroundColor: theme.surfaceAlt, borderColor: theme.border },
+          ]}
+        >
+          <Ionicons
+            name="folder-open-outline"
+            size={24}
+            color={theme.textMuted}
+          />
         </View>
-      </TouchableOpacity>
+      )}
+
+      <View style={styles.cardBody}>
+        <ThemedText style={[styles.title, { color: theme.text }]}>
+          {title}
+        </ThemedText>
+        <ThemedText style={[styles.meta, { color: theme.textMuted }]}>
+          {meta}
+        </ThemedText>
+      </View>
+
+      {selected && (
+        <Ionicons
+          name="checkmark-circle"
+          size={22}
+          color={theme.primary}
+        />
+      )}
+    </TouchableOpacity>
+  );
+
+  return (
+    <ThemedView
+      style={[
+        styles.container,
+        { backgroundColor: theme.background },
+      ]}
+    >
+      <View style={styles.headerBlock}>
+        <ThemedText style={[styles.headerTitle, { color: theme.text }]}>
+          Select Container
+        </ThemedText>
+        <ThemedText style={[styles.headerSubtitle, { color: theme.textMuted }]}>
+          Choose where this item belongs.
+        </ThemedText>
+      </View>
+
+      {renderCard(
+        'No Container',
+        'Remove item from container',
+        currentSelectedId === null,
+        () => handleSelect(null),
+        null
+      )}
 
       <FlatList
         data={containers}
         keyExtractor={(item) => `container-${item.id}`}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.card,
-              currentSelectedId === item.id && styles.selectedCard,
-            ]}
-            onPress={() => handleSelect(item.id)}
-            activeOpacity={0.8}
-          >
-            {item.image_uri ? (
-              <Image source={{ uri: item.image_uri }} style={styles.image} />
-            ) : (
-              <View style={[styles.image, styles.imagePlaceholder]} />
-            )}
-
-            <View style={styles.cardBody}>
-              <ThemedText style={styles.title}>{item.name}</ThemedText>
-              <ThemedText style={styles.meta}>
-                {currentSelectedId === item.id ? 'Selected' : 'Tap to select'}
-              </ThemedText>
-            </View>
-          </TouchableOpacity>
-        )}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) =>
+          renderCard(
+            item.name,
+            currentSelectedId === item.id ? 'Selected' : 'Tap to select',
+            currentSelectedId === item.id,
+            () => handleSelect(item.id),
+            item.image_uri
+          )
+        }
       />
     </ThemedView>
   );
@@ -85,37 +152,46 @@ export default function SelectContainerPage() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 67,
     flex: 1,
-    padding: 16,
+    padding: Spacing.lg,
+    paddingTop: 24,
+  },
+  headerBlock: {
+    marginBottom: Spacing.lg,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  headerSubtitle: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   listContent: {
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: 4,
+    paddingBottom: Spacing.xxl,
   },
   card: {
     flexDirection: 'row',
     gap: 12,
     padding: 12,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
     marginBottom: 12,
     alignItems: 'center',
-  },
-  selectedCard: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
+    ...Shadows.card,
   },
   image: {
     width: 72,
     height: 72,
     borderRadius: 12,
-    backgroundColor: '#E5E7EB',
   },
   imagePlaceholder: {
-    opacity: 0.6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   cardBody: {
     flex: 1,
@@ -124,11 +200,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    fontWeight: '700',
   },
   meta: {
     fontSize: 14,
-    color: '#6B7280',
   },
 });
