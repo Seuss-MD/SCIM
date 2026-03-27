@@ -17,7 +17,7 @@ export type Item = {
   image_uri: string;
   container_id: number | null;
   embedding: string | null;
-  tags: string | null; // NEW
+  tags: string | null;
   created_at: string;
 };
 
@@ -43,11 +43,9 @@ export function initDatabase() {
     );
   `);
 
-  // Containers
   try { db.execSync(`ALTER TABLE containers ADD COLUMN image_uri TEXT;`); } catch {}
   try { db.execSync(`ALTER TABLE containers ADD COLUMN embedding TEXT;`); } catch {}
 
-  // Items
   try { db.execSync(`ALTER TABLE items ADD COLUMN description TEXT;`); } catch {}
   try { db.execSync(`ALTER TABLE items ADD COLUMN container_id INTEGER;`); } catch {}
   try { db.execSync(`ALTER TABLE items ADD COLUMN embedding TEXT;`); } catch {}
@@ -62,8 +60,8 @@ export function insertItem(
   containerId: number | null,
   embedding: number[] | null,
   tags: string[] = []
-) {
-  db.runSync(
+): number {
+  const result = db.runSync(
     `INSERT INTO items (name, description, image_uri, container_id, embedding, tags)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [
@@ -75,6 +73,8 @@ export function insertItem(
       JSON.stringify(tags),
     ]
   );
+
+  return Number(result.lastInsertRowId);
 }
 
 export function updateItem(
@@ -89,6 +89,23 @@ export function updateItem(
      SET name = ?, description = ?, container_id = ?, tags = ?
      WHERE id = ?`,
     [name, description, containerId, JSON.stringify(tags), id]
+  );
+}
+
+export function updateItemAiMetadata(
+  id: number,
+  description: string | null,
+  embedding: number[] | null
+) {
+  db.runSync(
+    `UPDATE items
+     SET description = ?, embedding = ?
+     WHERE id = ?`,
+    [
+      description,
+      embedding ? JSON.stringify(embedding) : null,
+      id,
+    ]
   );
 }
 
@@ -144,7 +161,6 @@ function parseEmbedding(value: string | null): number[] | null {
   }
 }
 
-// NEW helper for tags
 export function parseTags(value: string | null): string[] {
   if (!value) return [];
   try {
@@ -208,9 +224,7 @@ export function searchContainersByEmbedding(
   return containers
     .map((container) => {
       const containerEmbedding = parseEmbedding(container.embedding);
-      const similarity = containerEmbedding
-        ? cosineSimilarity(queryEmbedding, containerEmbedding)
-        : -1;
+      const similarity = containerEmbedding ? cosineSimilarity(queryEmbedding, containerEmbedding) : -1;
       return { ...container, similarity };
     })
     .filter((container) => container.similarity >= 0)

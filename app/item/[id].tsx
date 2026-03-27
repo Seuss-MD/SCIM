@@ -5,7 +5,7 @@ import {
   useRouter,
   useFocusEffect,
 } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   StyleSheet,
   Image,
@@ -13,6 +13,9 @@ import {
   TouchableOpacity,
   View,
   useColorScheme,
+  ActivityIndicator,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -27,6 +30,65 @@ import {
   type Container,
 } from '@/components/database';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
+
+function AiLoadingBar({
+  trackColor,
+  fillColor,
+}: {
+  trackColor: string;
+  fillColor: string;
+}) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const anim = useState(new Animated.Value(0))[0];
+
+  useEffect(() => {
+    if (!trackWidth) return;
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [anim, trackWidth]);
+
+  const translateX = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-trackWidth * 0.35, trackWidth],
+  });
+
+  return (
+    <View
+      onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+      style={[styles.progressTrack, { backgroundColor: trackColor }]}
+    >
+      {trackWidth > 0 && (
+        <Animated.View
+          style={[
+            styles.progressFill,
+            {
+              backgroundColor: fillColor,
+              width: trackWidth * 0.35,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      )}
+    </View>
+  );
+}
 
 export default function ItemDetail() {
   const { id } = useLocalSearchParams();
@@ -66,6 +128,30 @@ export default function ItemDetail() {
     }, [loadItem])
   );
 
+  useEffect(() => {
+    if (!item?.id) return;
+
+    const needsAiDescription = !item.description?.trim();
+    if (!needsAiDescription) return;
+
+    const interval = setInterval(() => {
+      const refreshed = getItemById(item.id);
+      if (!refreshed) return;
+
+      setItem(refreshed);
+
+      if (refreshed.container_id != null) {
+        setContainer(getContainerById(refreshed.container_id));
+      }
+
+      if (refreshed.description?.trim()) {
+        clearInterval(interval);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [item?.id, item?.description]);
+
   const handleDelete = () => {
     if (!item) return;
 
@@ -85,6 +171,8 @@ export default function ItemDetail() {
       ]
     );
   };
+
+  const isGeneratingDescription = !!item && !item.description?.trim();
 
   return (
     <ParallaxScrollView
@@ -135,9 +223,34 @@ export default function ItemDetail() {
               <ThemedText style={[styles.label, { color: theme.textMuted }]}>
                 Description
               </ThemedText>
-              <ThemedText style={[styles.description, { color: theme.text }]}>
-                {item.description?.trim() || 'No description available.'}
-              </ThemedText>
+
+              {isGeneratingDescription ? (
+                <View style={styles.loadingBlock}>
+                  <View style={styles.loadingRow}>
+                    <ActivityIndicator size="small" color={theme.tint} />
+                    <ThemedText
+                      style={[styles.loadingTitle, { color: theme.text }]}
+                    >
+                      Generating AI description...
+                    </ThemedText>
+                  </View>
+
+                  <ThemedText
+                    style={[styles.loadingHint, { color: theme.textMuted }]}
+                  >
+                    Uploading image and analyzing item details.
+                  </ThemedText>
+
+                  <AiLoadingBar
+                    trackColor={theme.surfaceAlt}
+                    fillColor={theme.tint}
+                  />
+                </View>
+              ) : (
+                <ThemedText style={[styles.description, { color: theme.text }]}>
+                  {item.description?.trim() || 'No description available.'}
+                </ThemedText>
+              )}
             </View>
 
             <View
@@ -300,6 +413,37 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  loadingBlock: {
+    gap: 10,
+    paddingTop: 2,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadingTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginLeft: 10,
+  },
+  loadingHint: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  progressTrack: {
+    height: 10,
+    width: '100%',
+    borderRadius: 999,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    position: 'absolute',
+    left: 0,
+    top: 0,
   },
   containerPreview: {
     flexDirection: 'row',

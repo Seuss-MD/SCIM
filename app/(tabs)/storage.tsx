@@ -18,12 +18,35 @@ import { ThemedView } from '@/components/themed-view';
 import {
   getAllContainers,
   deleteContainer,
+  getAllItems,
+  deleteItem,
 } from '@/components/database';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 
+type StorageTab = 'containers' | 'items';
+
+type ContainerRecord = {
+  id: number;
+  name?: string | null;
+  image_uri?: string | null;
+};
+
+type ItemRecord = {
+  id: number;
+  name?: string | null;
+  image_uri?: string | null;
+  container_id?: number | null;
+};
+
+const ATTACHED_CARD_COLOR = '#F7F3E3';
+const UNATTACHED_ITEM_CARD_COLOR = '#6F1A07';
+
 export default function StorageScreen() {
   const router = useRouter();
-  const [containers, setContainers] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<StorageTab>('containers');
+  const [containers, setContainers] = useState<ContainerRecord[]>([]);
+  const [items, setItems] = useState<ItemRecord[]>([]);
+
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
@@ -32,18 +55,18 @@ export default function StorageScreen() {
   const spacing = 16;
   const imageSize = (screenWidth - spacing * (numColumns + 1)) / numColumns;
 
-  const loadContainers = () => {
-    const data = getAllContainers();
-    setContainers(data);
+  const loadData = () => {
+    setContainers(getAllContainers() as ContainerRecord[]);
+    setItems(getAllItems() as ItemRecord[]);
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadContainers();
+      loadData();
     }, [])
   );
 
-  const handleDelete = (id: number) => {
+  const handleDeleteContainer = (id: number) => {
     Alert.alert(
       'Delete Container',
       'Are you sure you want to delete this container?',
@@ -54,11 +77,84 @@ export default function StorageScreen() {
           style: 'destructive',
           onPress: () => {
             deleteContainer(id);
-            loadContainers();
+            loadData();
           },
         },
       ]
     );
+  };
+
+  const handleDeleteItem = (id: number) => {
+    Alert.alert(
+      'Delete Item',
+      'Are you sure you want to delete this item?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteItem(id);
+            loadData();
+          },
+        },
+      ]
+    );
+  };
+
+  const isContainers = activeTab === 'containers';
+  const data = isContainers ? containers : items;
+
+  const handleCreate = () => {
+    if (isContainers) {
+      router.push('/container/create');
+    } else {
+      router.push('/item/create');
+    }
+  };
+
+  const handlePressCard = (item: ContainerRecord | ItemRecord) => {
+    if (isContainers) {
+      router.push(`/container/${item.id}`);
+    } else {
+      router.push(`/item/${item.id}`);
+    }
+  };
+
+  const handleLongPressCard = (item: ContainerRecord | ItemRecord) => {
+    if (isContainers) {
+      handleDeleteContainer(item.id);
+    } else {
+      handleDeleteItem(item.id);
+    }
+  };
+
+  const getCardColors = (item: ContainerRecord | ItemRecord) => {
+    if (!isContainers) {
+      const itemRecord = item as ItemRecord;
+      const isLooseItem =
+        itemRecord.container_id === null || itemRecord.container_id === undefined;
+
+      if (isLooseItem) {
+        return {
+          cardBackground: UNATTACHED_ITEM_CARD_COLOR,
+          cardBorder: UNATTACHED_ITEM_CARD_COLOR,
+          titleColor: Colors.light.dangerText,
+          chevronColor: Colors.light.dangerText,
+          imageBackground: '#8A2F1D',
+          fallbackIconColor: Colors.light.dangerText,
+        };
+      }
+    }
+
+    return {
+      cardBackground: ATTACHED_CARD_COLOR,
+      cardBorder: theme.border,
+      titleColor: Colors.light.text,
+      chevronColor: Colors.light.textMuted,
+      imageBackground: theme.surfaceAlt,
+      fallbackIconColor: Colors.light.textMuted,
+    };
   };
 
   return (
@@ -69,7 +165,7 @@ export default function StorageScreen() {
       ]}
     >
       <FlatList
-        data={containers}
+        data={data}
         keyExtractor={(item) => item.id.toString()}
         numColumns={numColumns}
         contentContainerStyle={styles.listContent}
@@ -79,11 +175,75 @@ export default function StorageScreen() {
           <View style={styles.headerBlock}>
             <View style={styles.titleBlock}>
               <ThemedText style={[styles.title, { color: theme.text }]}>
-                Containers
+                Storage
               </ThemedText>
               <ThemedText style={[styles.subtitle, { color: theme.textMuted }]}>
-                Tap to open. Long press to delete.
+                Browse your containers and items. Tap to open. Long press to delete.
+                { '\n'}
+                Red label items are not in any container.
               </ThemedText>
+            </View>
+
+            <View
+              style={[
+                styles.toggleWrap,
+                {
+                  backgroundColor: theme.surfaceAlt,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  isContainers && {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                  },
+                ]}
+                activeOpacity={0.85}
+                onPress={() => setActiveTab('containers')}
+              >
+                <Ionicons
+                  name="cube-outline"
+                  size={16}
+                  color={isContainers ? theme.text : theme.textMuted}
+                />
+                <ThemedText
+                  style={[
+                    styles.toggleText,
+                    { color: isContainers ? theme.text : theme.textMuted },
+                  ]}
+                >
+                  Containers
+                </ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.toggleButton,
+                  !isContainers && {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                  },
+                ]}
+                activeOpacity={0.85}
+                onPress={() => setActiveTab('items')}
+              >
+                <Ionicons
+                  name="pricetag-outline"
+                  size={16}
+                  color={!isContainers ? theme.text : theme.textMuted}
+                />
+                <ThemedText
+                  style={[
+                    styles.toggleText,
+                    { color: !isContainers ? theme.text : theme.textMuted },
+                  ]}
+                >
+                  Items
+                </ThemedText>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -94,7 +254,7 @@ export default function StorageScreen() {
                 },
               ]}
               activeOpacity={0.85}
-              onPress={() => router.push('/container/create')}
+              onPress={handleCreate}
             >
               <View style={styles.buttonContent}>
                 <Ionicons
@@ -108,7 +268,7 @@ export default function StorageScreen() {
                     { color: theme.primaryText },
                   ]}
                 >
-                  Create Container
+                  {isContainers ? 'Create Container' : 'Create Item'}
                 </ThemedText>
               </View>
             </TouchableOpacity>
@@ -125,7 +285,7 @@ export default function StorageScreen() {
             ]}
           >
             <Ionicons
-              name="folder-open-outline"
+              name={isContainers ? 'folder-open-outline' : 'pricetag-outline'}
               size={32}
               color={theme.textMuted}
             />
@@ -135,7 +295,7 @@ export default function StorageScreen() {
                 { color: theme.text },
               ]}
             >
-              No containers yet
+              {isContainers ? 'No containers yet' : 'No items yet'}
             </ThemedText>
             <ThemedText
               style={[
@@ -143,56 +303,81 @@ export default function StorageScreen() {
                 { color: theme.textMuted },
               ]}
             >
-              Create your first container to start organizing your items.
+              {isContainers
+                ? 'Create your first container to start organizing your items.'
+                : 'Create your first item to start tracking what you own.'}
             </ThemedText>
           </View>
         }
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.surface,
-                borderColor: theme.border,
-                width: imageSize,
-              },
-            ]}
-            onPress={() => router.push(`/container/${item.id}`)}
-            onLongPress={() => handleDelete(item.id)}
-            delayLongPress={400}
-            activeOpacity={0.85}
-          >
-            <Image
-              source={{ uri: item.image_uri }}
+        renderItem={({ item }) => {
+          const colors = getCardColors(item);
+
+          return (
+            <TouchableOpacity
               style={[
-                styles.image,
+                styles.card,
                 {
-                  width: '100%',
-                  height: imageSize,
-                  backgroundColor: theme.surfaceAlt,
+                  backgroundColor: colors.cardBackground,
+                  borderColor: colors.cardBorder,
+                  width: imageSize,
                 },
               ]}
-            />
+              onPress={() => handlePressCard(item)}
+              onLongPress={() => handleLongPressCard(item)}
+              delayLongPress={400}
+              activeOpacity={0.85}
+            >
+              {item.image_uri ? (
+                <Image
+                  source={{ uri: item.image_uri }}
+                  style={[
+                    styles.image,
+                    {
+                      width: '100%',
+                      height: imageSize,
+                      backgroundColor: colors.imageBackground,
+                    },
+                  ]}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.imageFallback,
+                    {
+                      width: '100%',
+                      height: imageSize,
+                      backgroundColor: colors.imageBackground,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={isContainers ? 'cube-outline' : 'pricetag-outline'}
+                    size={28}
+                    color={colors.fallbackIconColor}
+                  />
+                </View>
+              )}
 
-            <View style={styles.cardFooter}>
-              <ThemedText
-                numberOfLines={1}
-                style={[
-                  styles.cardTitle,
-                  { color: theme.text },
-                ]}
-              >
-                {item.name || 'Unnamed Container'}
-              </ThemedText>
+              <View style={styles.cardFooter}>
+                <ThemedText
+                  numberOfLines={1}
+                  style={[
+                    styles.cardTitle,
+                    { color: colors.titleColor },
+                  ]}
+                >
+                  {item.name || (isContainers ? 'Unnamed Container' : 'Unnamed Item')}
+                </ThemedText>
 
-              <Ionicons
-                name="chevron-forward"
-                size={18}
-                color={theme.textMuted}
-              />
-            </View>
-          </TouchableOpacity>
-        )}
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={colors.chevronColor}
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        }}
       />
     </ThemedView>
   );
@@ -201,7 +386,7 @@ export default function StorageScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    paddingTop:Spacing.xl,
+    paddingTop: Spacing.xl,
   },
   listContent: {
     padding: Spacing.lg,
@@ -212,19 +397,43 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     marginBottom: Spacing.xl,
+    gap: Spacing.md,
   },
   titleBlock: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   title: {
-    fontSize: 32,
+    fontSize: 48,
     fontWeight: '800',
     letterSpacing: -0.6,
     marginBottom: 6,
+    lineHeight: 52,
   },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
+  },
+  toggleWrap: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: 4,
+    gap: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: Radius.md - 4,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   createButton: {
     minHeight: 52,
@@ -245,7 +454,7 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: Radius.lg,
-    borderWidth: 1,
+    borderWidth: 0.01,
     overflow: 'hidden',
     marginBottom: 16,
     ...Shadows.card,
@@ -253,6 +462,10 @@ const styles = StyleSheet.create({
   image: {
     borderTopLeftRadius: Radius.lg,
     borderTopRightRadius: Radius.lg,
+  },
+  imageFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardFooter: {
     minHeight: 52,

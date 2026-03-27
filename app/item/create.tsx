@@ -1,3 +1,4 @@
+// app/item/create.tsx
 import { useState } from 'react';
 import {
   StyleSheet,
@@ -7,16 +8,14 @@ import {
   Image,
   View,
   useColorScheme,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
-
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import ScimCamera from '@/components/ScimCam';
-
-import { insertItem } from '@/components/database';
+import { insertItem, updateItemAiMetadata } from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { generateEmbeddingFromImage } from '@/components/aiTools';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
@@ -28,17 +27,31 @@ export default function CreateItem() {
   const [name, setName] = useState('');
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const [showCamera, setShowCamera] = useState(false);
-  const [value, setValue] = useState<string | null>(null);
-  const [itemData, setItemData] = useState<{ label: string }[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
+  async function enrichItemInBackground(itemId: number, localImageUri: string) {
+    try {
+      const { description, embedding } = await generateEmbeddingFromImage(localImageUri);
+      updateItemAiMetadata(itemId, description, embedding);
+    } catch (error: any) {
+      console.error('Background AI enrichment failed:', error);
+    }
+  }
+
   async function handleCreate() {
     const finalName = name.trim();
-    const parsedContainerId = Array.isArray(containerId)
-      ? Number(containerId[0])
-      : Number(containerId);
+
+    const rawContainerId = Array.isArray(containerId)
+      ? containerId[0]
+      : containerId;
+
+    const parsedContainerId =
+      rawContainerId == null || rawContainerId === ''
+        ? null
+        : Number(rawContainerId);
 
     if (!finalName) {
       Alert.alert('Missing name', 'Please enter an item name.');
@@ -50,35 +63,38 @@ export default function CreateItem() {
       return;
     }
 
-    if (!containerId || Number.isNaN(parsedContainerId)) {
-      Alert.alert('Integration Error', 'Missing or invalid container ID.');
+    if (parsedContainerId !== null && Number.isNaN(parsedContainerId)) {
+      Alert.alert('Integration Error', 'Invalid container ID.');
       return;
     }
 
     try {
-      const savedFile = await savePhotoToScimFolder(photo.uri);
-      const { description, embedding } = await generateEmbeddingFromImage(savedFile.uri);
+      setIsSaving(true);
 
-      insertItem(
-        finalName || description,
-        description,
+      const savedFile = await savePhotoToScimFolder(photo.uri);
+
+      const itemId = insertItem(
+        finalName,
+        null,
         savedFile.uri,
         parsedContainerId,
-        embedding
+        null
       );
+
+      void enrichItemInBackground(itemId, savedFile.uri);
 
       router.back();
     } catch (error: any) {
       console.error('Failed to create item:', error);
-      console.error('message:', error?.message);
       Alert.alert('Error', error?.message ?? 'Failed to save item.');
+      setIsSaving(false);
     }
   }
 
   if (showCamera) {
     return (
       <ScimCamera
-        onPhotoTaken={(newPhoto) => {
+        onPhotoTaken={(newPhoto: { uri: string }) => {
           setPhoto(newPhoto);
           setShowCamera(false);
         }}
@@ -109,66 +125,40 @@ export default function CreateItem() {
 
         <TextInput
           placeholder="Item name"
-          placeholderTextColor={theme.textSoft}
+          placeholderTextColor={theme.textMuted}
           value={name}
           onChangeText={setName}
+          editable={!isSaving}
           style={[
             styles.input,
             {
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
               color: theme.text,
+              borderColor: theme.border,
+              backgroundColor: theme.background,
             },
           ]}
         />
 
-        <View
-          style={[
-            styles.pickerWrap,
-            {
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
-            },
-          ]}
-        >
-          <Picker
-            selectedValue={value}
-            onValueChange={(itemValue) => setValue(itemValue)}
-            style={[styles.picker, { color: theme.text }]}
-            dropdownIconColor={theme.textMuted}
-          >
-            {itemData.length === 0 ? (
-              <Picker.Item label="No suggestions yet" value={null} />
-            ) : (
-              itemData.map((item, index) => (
-                <Picker.Item
-                  key={index}
-                  label={item.label}
-                  value={item.label}
-                />
-              ))
-            )}
-          </Picker>
-        </View>
-
         <TouchableOpacity
+          onPress={() => !isSaving && setShowCamera(true)}
+          activeOpacity={0.85}
           style={[
             styles.imageButton,
             {
-              backgroundColor: theme.secondary,
+              backgroundColor: theme.background,
               borderColor: theme.border,
+              opacity: isSaving ? 0.6 : 1,
             },
           ]}
-          onPress={() => setShowCamera(true)}
-          activeOpacity={0.85}
+          disabled={isSaving}
         >
           <Ionicons
-            name="camera-outline"
+            name={photo ? 'camera-reverse' : 'camera'}
             size={18}
-            color={theme.secondaryText}
+            color={theme.text}
             style={styles.buttonIcon}
           />
-          <ThemedText style={[styles.imageButtonText, { color: theme.secondaryText }]}>
+          <ThemedText style={[styles.imageButtonText, { color: theme.text }]}>
             {photo ? 'Retake Photo' : 'Take Photo'}
           </ThemedText>
         </TouchableOpacity>
@@ -179,32 +169,46 @@ export default function CreateItem() {
             style={[
               styles.preview,
               {
-                backgroundColor: theme.surfaceAlt,
                 borderColor: theme.border,
+                backgroundColor: theme.background,
               },
             ]}
+            resizeMode="cover"
           />
         )}
 
         <TouchableOpacity
+          onPress={handleCreate}
+          activeOpacity={0.9}
+          disabled={isSaving}
           style={[
             styles.createButton,
             {
-              backgroundColor: theme.primary,
+              backgroundColor: theme.tint,
+              opacity: isSaving ? 0.8 : 1,
             },
           ]}
-          onPress={handleCreate}
-          activeOpacity={0.85}
         >
-          <Ionicons
-            name="add-circle-outline"
-            size={18}
-            color={theme.primaryText}
-            style={styles.buttonIcon}
-          />
-          <ThemedText style={[styles.createText, { color: theme.primaryText }]}>
-            Create Item
-          </ThemedText>
+          {isSaving ? (
+            <>
+              <ActivityIndicator size="small" color="#fff" style={styles.buttonIcon} />
+              <ThemedText style={[styles.createText, { color: '#fff' }]}>
+                Saving...
+              </ThemedText>
+            </>
+          ) : (
+            <>
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color="#fff"
+                style={styles.buttonIcon}
+              />
+              <ThemedText style={[styles.createText, { color: '#fff' }]}>
+                Create Item
+              </ThemedText>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </ThemedView>
@@ -241,16 +245,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     fontSize: 16,
-  },
-  pickerWrap: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    overflow: 'hidden',
-    justifyContent: 'center',
-  },
-  picker: {
-    height: 54,
-    width: '100%',
   },
   imageButton: {
     minHeight: 50,
