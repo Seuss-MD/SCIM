@@ -34,7 +34,7 @@ function safeAlter(sql: string) {
   try {
     db.execSync(sql);
   } catch {
-    // already exists
+    // column already exists
   }
 }
 
@@ -42,7 +42,7 @@ export function initDatabase() {
   db.execSync(`
     CREATE TABLE IF NOT EXISTS containers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cloud_id TEXT,
+      cloud_id TEXT UNIQUE,
       name TEXT NOT NULL,
       image_uri TEXT,
       embedding TEXT,
@@ -54,7 +54,7 @@ export function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cloud_id TEXT,
+      cloud_id TEXT UNIQUE,
       name TEXT,
       description TEXT,
       image_uri TEXT NOT NULL,
