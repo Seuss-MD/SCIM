@@ -32,7 +32,7 @@ export default function SyncScreen() {
       setStatus('Sync complete.');
     } catch (error: any) {
       console.error('Sync failed:', error);
-      setStatus(error?.message ?? 'Sync failed.');
+      setStatus(`${error?.code ?? 'error'}: ${error?.message ?? 'Sync failed.'}`);
     } finally {
       setIsSyncing(false);
     }

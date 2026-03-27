@@ -17,7 +17,6 @@ import {
   getAllContainers,
   getAllItems,
   getContainerByCloudId,
-  getContainerById,
   getItemByCloudId,
   insertContainer,
   insertItem,
@@ -28,6 +27,7 @@ import {
 
 type CreateCloudContainerInput = {
   workspaceId?: string;
+  workspaceLabel?: string;
   name: string;
   imageUrl?: string | null;
   localImageUri?: string | null;
@@ -36,11 +36,13 @@ type CreateCloudContainerInput = {
 
 type CreateCloudItemInput = {
   workspaceId?: string;
+  workspaceLabel?: string;
   name: string;
   description?: string | null;
   imageUrl?: string | null;
   localImageUri?: string | null;
   containerId?: string | null;
+  containerName?: string | null;
   embedding?: number[] | null;
   tags?: string[];
 };
@@ -72,6 +74,47 @@ function normalizeTags(value: unknown): string[] {
   return Array.isArray(value) ? (value as string[]) : [];
 }
 
+function slugify(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50) || 'untitled';
+}
+
+function buildWorkspaceLabel(name: string) {
+  return slugify(name);
+}
+
+function buildContainerImagePath(
+  workspaceId: string,
+  workspaceLabel: string,
+  containerId: string,
+  containerName: string
+) {
+  const safeContainerName = slugify(containerName);
+  return `workspaces/${workspaceId}/${workspaceLabel}/containers/${safeContainerName}--${containerId}/container-photo/${safeContainerName}.jpg`;
+}
+
+function buildItemImagePath(
+  workspaceId: string,
+  workspaceLabel: string,
+  itemId: string,
+  itemName: string,
+  containerId?: string | null,
+  containerName?: string | null
+) {
+  const safeItemName = slugify(itemName);
+
+  if (!containerId || !containerName) {
+    return `workspaces/${workspaceId}/${workspaceLabel}/containers/no-container/items/${safeItemName}--${itemId}.jpg`;
+  }
+
+  const safeContainerName = slugify(containerName);
+  return `workspaces/${workspaceId}/${workspaceLabel}/containers/${safeContainerName}--${containerId}/items/${safeItemName}--${itemId}.jpg`;
+}
+
 async function requireUid(): Promise<string> {
   const uid = auth.currentUser?.uid;
   if (!uid) {
@@ -88,9 +131,14 @@ export async function ensurePersonalWorkspace(): Promise<string> {
   const workspaceSnap = await getDoc(workspaceRef);
 
   if (!workspaceSnap.exists()) {
+    const fallbackName =
+      auth.currentUser?.displayName ||
+      auth.currentUser?.email?.split('@')[0] ||
+      'My SCIM';
+
     await setDoc(workspaceRef, {
       id: uid,
-      name: 'My SCIM',
+      name: fallbackName,
       owner_uid: uid,
       created_by: uid,
       updated_by: uid,
@@ -119,19 +167,64 @@ async function resolveWorkspaceId(workspaceId?: string): Promise<string> {
   return ensurePersonalWorkspace();
 }
 
+async function resolveWorkspaceContext(
+  workspaceId?: string,
+  workspaceLabel?: string
+): Promise<{ workspaceId: string; workspaceLabel: string }> {
+  const resolvedWorkspaceId = await resolveWorkspaceId(workspaceId);
+
+  if (workspaceLabel) {
+    return {
+      workspaceId: resolvedWorkspaceId,
+      workspaceLabel,
+    };
+  }
+
+  const workspaceSnap = await getDoc(doc(db, 'workspaces', resolvedWorkspaceId));
+  const workspaceData = workspaceSnap.data();
+
+  const labelSource =
+    typeof workspaceData?.name === 'string' && workspaceData.name.trim()
+      ? workspaceData.name
+      : auth.currentUser?.displayName ||
+        auth.currentUser?.email?.split('@')[0] ||
+        'my-scim';
+
+  return {
+    workspaceId: resolvedWorkspaceId,
+    workspaceLabel: buildWorkspaceLabel(labelSource),
+  };
+}
+
 async function uploadLocalImage(
   workspaceId: string,
+  workspaceLabel: string,
   collectionName: 'containers' | 'items',
   entityId: string,
-  localImageUri: string
+  entityName: string,
+  localImageUri: string,
+  containerId?: string | null,
+  containerName?: string | null
 ): Promise<{ image_uri: string; image_storage_path: string }> {
   const response = await fetch(localImageUri);
   const blob = await response.blob();
 
   const path =
     collectionName === 'containers'
-      ? `workspaces/${workspaceId}/containers/${entityId}/cover.jpg`
-      : `workspaces/${workspaceId}/items/${entityId}/photo.jpg`;
+      ? buildContainerImagePath(
+          workspaceId,
+          workspaceLabel,
+          entityId,
+          entityName
+        )
+      : buildItemImagePath(
+          workspaceId,
+          workspaceLabel,
+          entityId,
+          entityName,
+          containerId,
+          containerName
+        );
 
   const storageRef = ref(storage, path);
 
@@ -149,10 +242,14 @@ async function uploadLocalImage(
 
 async function resolveCloudImage(
   workspaceId: string,
+  workspaceLabel: string,
   collectionName: 'containers' | 'items',
   entityId: string,
+  entityName: string,
   imageUrl?: string | null,
-  localImageUri?: string | null
+  localImageUri?: string | null,
+  containerId?: string | null,
+  containerName?: string | null
 ): Promise<{ image_uri: string | null; image_storage_path: string | null }> {
   if (imageUrl) {
     return {
@@ -162,14 +259,26 @@ async function resolveCloudImage(
   }
 
   if (localImageUri) {
-    if (localImageUri.startsWith('http://') || localImageUri.startsWith('https://')) {
+    if (
+      localImageUri.startsWith('http://') ||
+      localImageUri.startsWith('https://')
+    ) {
       return {
         image_uri: localImageUri,
         image_storage_path: null,
       };
     }
 
-    return uploadLocalImage(workspaceId, collectionName, entityId, localImageUri);
+    return uploadLocalImage(
+      workspaceId,
+      workspaceLabel,
+      collectionName,
+      entityId,
+      entityName,
+      localImageUri,
+      containerId,
+      containerName
+    );
   }
 
   return {
@@ -180,14 +289,21 @@ async function resolveCloudImage(
 
 export async function createCloudContainer(input: CreateCloudContainerInput) {
   const uid = await requireUid();
-  const workspaceId = await resolveWorkspaceId(input.workspaceId);
+  const { workspaceId, workspaceLabel } = await resolveWorkspaceContext(
+    input.workspaceId,
+    input.workspaceLabel
+  );
 
-  const containerRef = doc(collection(db, 'workspaces', workspaceId, 'containers'));
+  const containerRef = doc(
+    collection(db, 'workspaces', workspaceId, 'containers')
+  );
 
   const image = await resolveCloudImage(
     workspaceId,
+    workspaceLabel,
     'containers',
     containerRef.id,
+    input.name,
     input.imageUrl,
     input.localImageUri
   );
@@ -207,21 +323,29 @@ export async function createCloudContainer(input: CreateCloudContainerInput) {
   return {
     id: containerRef.id,
     workspaceId,
+    workspaceLabel,
   };
 }
 
 export async function createCloudItem(input: CreateCloudItemInput) {
   const uid = await requireUid();
-  const workspaceId = await resolveWorkspaceId(input.workspaceId);
+  const { workspaceId, workspaceLabel } = await resolveWorkspaceContext(
+    input.workspaceId,
+    input.workspaceLabel
+  );
 
   const itemRef = doc(collection(db, 'workspaces', workspaceId, 'items'));
 
   const image = await resolveCloudImage(
     workspaceId,
+    workspaceLabel,
     'items',
     itemRef.id,
+    input.name,
     input.imageUrl,
-    input.localImageUri
+    input.localImageUri,
+    input.containerId,
+    input.containerName
   );
 
   await setDoc(itemRef, {
@@ -242,11 +366,17 @@ export async function createCloudItem(input: CreateCloudItemInput) {
   return {
     id: itemRef.id,
     workspaceId,
+    workspaceLabel,
   };
 }
 
-export async function syncMissingData(workspaceId?: string): Promise<SyncResult> {
-  const resolvedWorkspaceId = await resolveWorkspaceId(workspaceId);
+export async function syncMissingData(
+  workspaceId?: string
+): Promise<SyncResult> {
+  const {
+    workspaceId: resolvedWorkspaceId,
+    workspaceLabel,
+  } = await resolveWorkspaceContext(workspaceId);
 
   const result: SyncResult = {
     workspaceId: resolvedWorkspaceId,
@@ -263,13 +393,16 @@ export async function syncMissingData(workspaceId?: string): Promise<SyncResult>
 
     const cloud = await createCloudContainer({
       workspaceId: resolvedWorkspaceId,
+      workspaceLabel,
       name: container.name,
       imageUrl:
-        container.image_uri?.startsWith('http://') || container.image_uri?.startsWith('https://')
+        container.image_uri?.startsWith('http://') ||
+        container.image_uri?.startsWith('https://')
           ? container.image_uri
           : null,
       localImageUri:
-        container.image_uri?.startsWith('http://') || container.image_uri?.startsWith('https://')
+        container.image_uri?.startsWith('http://') ||
+        container.image_uri?.startsWith('https://')
           ? null
           : container.image_uri,
       embedding: parseEmbeddingString(container.embedding),
@@ -280,11 +413,8 @@ export async function syncMissingData(workspaceId?: string): Promise<SyncResult>
   }
 
   const localContainersAfterPush = getAllContainers();
-  const localContainerById = new Map(localContainersAfterPush.map((container) => [container.id, container]));
-  const localContainerByCloudId = new Map(
-    localContainersAfterPush
-      .filter((container) => !!container.cloud_id)
-      .map((container) => [container.cloud_id as string, container])
+  const localContainerById = new Map(
+    localContainersAfterPush.map((container) => [container.id, container])
   );
 
   const localItems = getAllItems();
@@ -292,29 +422,41 @@ export async function syncMissingData(workspaceId?: string): Promise<SyncResult>
   for (const item of localItems) {
     if (item.cloud_id) continue;
 
-    const containerCloudId =
+    const localContainer =
       typeof item.container_id === 'number'
-        ? localContainerById.get(item.container_id)?.cloud_id ?? null
+        ? localContainerById.get(item.container_id) ?? null
         : null;
+
+    const containerCloudId = localContainer?.cloud_id ?? null;
+    const containerName = localContainer?.name ?? null;
 
     const cloud = await createCloudItem({
       workspaceId: resolvedWorkspaceId,
+      workspaceLabel,
       name: item.name ?? 'Untitled item',
       description: item.description ?? null,
       imageUrl:
-        item.image_uri?.startsWith('http://') || item.image_uri?.startsWith('https://')
+        item.image_uri?.startsWith('http://') ||
+        item.image_uri?.startsWith('https://')
           ? item.image_uri
           : null,
       localImageUri:
-        item.image_uri?.startsWith('http://') || item.image_uri?.startsWith('https://')
+        item.image_uri?.startsWith('http://') ||
+        item.image_uri?.startsWith('https://')
           ? null
           : item.image_uri,
       containerId: containerCloudId,
+      containerName,
       embedding: parseEmbeddingString(item.embedding),
       tags: parseTags(item.tags),
     });
 
-    setItemCloudSync(item.id, cloud.id, containerCloudId, auth.currentUser?.uid ?? null);
+    setItemCloudSync(
+      item.id,
+      cloud.id,
+      containerCloudId,
+      auth.currentUser?.uid ?? null
+    );
     result.pushedItems += 1;
   }
 
