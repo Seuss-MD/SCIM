@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,14 @@ import {
   ScrollView,
 } from 'react-native';
 import { signOut, updateEmail, updatePassword } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
-import { auth } from '../../firebase';
+import { auth, db } from '../../firebase';
 import { useAuthUser } from '@/components/authGate';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
+import { registerForPushNotificationsAsync } from '@/functions/lib/notifications';
 
 export default function ProfileScreen() {
   const { user, loading } = useAuthUser();
@@ -28,12 +30,48 @@ export default function ProfileScreen() {
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState(user?.email ?? '');
   const [newPassword, setNewPassword] = useState('');
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [notifyOnNewItems, setNotifyOnNewItems] = useState(true);
+  const [notifyOnNewContainers, setNotifyOnNewContainers] = useState(true);
+  const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [registeringPush, setRegisteringPush] = useState(false);
+  const [loadingPrefs, setLoadingPrefs] = useState(true);
+
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
   const [createGroupName, setCreateGroupName] = useState('');
   const [joinGroupCode, setJoinGroupCode] = useState('');
+
+  useEffect(() => {
+    const loadNotificationPrefs = async () => {
+      if (!auth.currentUser) {
+        setLoadingPrefs(false);
+        return;
+      }
+
+      try {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        const snap = await getDoc(userRef);
+
+        if (snap.exists()) {
+          const data = snap.data();
+
+          setNotificationsEnabled(Boolean(data.notificationsEnabled));
+          setNotifyOnNewItems(data.notifyOnNewItems !== false);
+          setNotifyOnNewContainers(data.notifyOnNewContainers !== false);
+          setExpoPushToken(data.expoPushToken ?? null);
+        }
+      } catch (error) {
+        console.error('Failed to load notification prefs:', error);
+      } finally {
+        setLoadingPrefs(false);
+      }
+    };
+
+    loadNotificationPrefs();
+  }, []);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -51,7 +89,7 @@ export default function ProfileScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
@@ -113,8 +151,116 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleToggleNotifications = (value: boolean) => {
-    setNotificationsEnabled(value);
+  const saveNotificationPrefs = async (updates: Record<string, unknown>) => {
+    if (!auth.currentUser) return;
+
+    await setDoc(
+      doc(db, 'users', auth.currentUser.uid),
+      {
+        email: auth.currentUser.email ?? null,
+        updatedAt: serverTimestamp(),
+        ...updates,
+      },
+      { merge: true }
+    );
+  };
+
+  const enableNotifications = async () => {
+    if (!auth.currentUser) {
+      Alert.alert('Not signed in', 'You need to be signed in first.');
+      return;
+    }
+
+    try {
+      setRegisteringPush(true);
+
+      const token = await registerForPushNotificationsAsync();
+
+      setExpoPushToken(token);
+      setNotificationsEnabled(true);
+
+      await saveNotificationPrefs({
+        expoPushToken: token,
+        notificationsEnabled: true,
+        notifyOnNewItems,
+        notifyOnNewContainers,
+      });
+
+      Alert.alert(
+        'Notifications enabled',
+        'Push notifications are enabled on this device.'
+      );
+    } catch (error: any) {
+      setNotificationsEnabled(false);
+      Alert.alert(
+        'Notifications error',
+        error?.message ?? 'Could not enable notifications.'
+      );
+    } finally {
+      setRegisteringPush(false);
+    }
+  };
+
+  const disableNotifications = async () => {
+    if (!auth.currentUser) {
+      setNotificationsEnabled(false);
+      setExpoPushToken(null);
+      return;
+    }
+
+    try {
+      await saveNotificationPrefs({
+        notificationsEnabled: false,
+        expoPushToken: null,
+      });
+
+      setNotificationsEnabled(false);
+      setExpoPushToken(null);
+
+      Alert.alert(
+        'Notifications disabled',
+        'Push notifications were disabled for this device.'
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'Error',
+        error?.message ?? 'Could not disable notifications.'
+      );
+    }
+  };
+
+  const handleToggleNotifications = async (value: boolean) => {
+    if (value) {
+      await enableNotifications();
+    } else {
+      await disableNotifications();
+    }
+  };
+
+  const handleToggleNewItems = async (value: boolean) => {
+    setNotifyOnNewItems(value);
+
+    try {
+      await saveNotificationPrefs({
+        notifyOnNewItems: value,
+      });
+    } catch (error: any) {
+      setNotifyOnNewItems(!value);
+      Alert.alert('Error', error?.message ?? 'Could not save preference.');
+    }
+  };
+
+  const handleToggleNewContainers = async (value: boolean) => {
+    setNotifyOnNewContainers(value);
+
+    try {
+      await saveNotificationPrefs({
+        notifyOnNewContainers: value,
+      });
+    } catch (error: any) {
+      setNotifyOnNewContainers(!value);
+      Alert.alert('Error', error?.message ?? 'Could not save preference.');
+    }
   };
 
   const handleCreateGroup = () => {
@@ -140,7 +286,7 @@ export default function ProfileScreen() {
     setJoinGroupCode('');
   };
 
-  if (loading) {
+  if (loading || loadingPrefs) {
     return (
       <View
         style={[
@@ -174,7 +320,7 @@ export default function ProfileScreen() {
         style={[
           styles.profileCard,
           {
-            backgroundColor: theme.surface,
+            backgroundColor: theme.surfaceAlt,
             borderColor: theme.border,
           },
         ]}
@@ -182,7 +328,7 @@ export default function ProfileScreen() {
         <View
           style={[
             styles.avatarOuter,
-            { backgroundColor: theme.surfaceAlt, borderColor: theme.border },
+            { backgroundColor: theme.surface, borderColor: theme.border },
           ]}
         >
           {profileImage ? (
@@ -269,12 +415,7 @@ export default function ProfileScreen() {
           </Text>
         </TouchableOpacity>
 
-        <Text
-          style={[
-            styles.label,
-            { color: theme.textMuted, marginTop: 16 },
-          ]}
-        >
+        <Text style={[styles.label, { color: theme.textMuted, marginTop: 16 }]}>
           Change Password
         </Text>
         <TextInput
@@ -382,27 +523,84 @@ export default function ProfileScreen() {
       <View
         style={[
           styles.section,
-          styles.notificationRow,
           {
             backgroundColor: theme.surface,
             borderColor: theme.border,
           },
         ]}
       >
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            Notifications
-          </Text>
-          <Text style={[styles.notificationText, { color: theme.textMuted }]}>
-            Turn app notifications on or off
-          </Text>
+        <View style={styles.notificationHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>
+              Notifications
+            </Text>
+            <Text style={[styles.notificationText, { color: theme.textMuted }]}>
+              Choose which alerts you want
+            </Text>
+          </View>
+
+          <Switch
+            value={notificationsEnabled}
+            onValueChange={handleToggleNotifications}
+            trackColor={{ false: '#999', true: theme.primary }}
+            disabled={registeringPush}
+          />
         </View>
 
-        <Switch
-          value={notificationsEnabled}
-          onValueChange={handleToggleNotifications}
-          trackColor={{ false: '#999', true: theme.primary }}
-        />
+        <View style={styles.preferenceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.preferenceTitle, { color: theme.text }]}>
+              New items
+            </Text>
+            <Text style={[styles.preferenceText, { color: theme.textMuted }]}>
+              Notify me when an item is added
+            </Text>
+          </View>
+
+          <Switch
+            value={notifyOnNewItems}
+            onValueChange={handleToggleNewItems}
+            trackColor={{ false: '#999', true: theme.primary }}
+            disabled={!notificationsEnabled}
+          />
+        </View>
+
+        <View style={styles.preferenceRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.preferenceTitle, { color: theme.text }]}>
+              New containers
+            </Text>
+            <Text style={[styles.preferenceText, { color: theme.textMuted }]}>
+              Notify me when a container is created
+            </Text>
+          </View>
+
+          <Switch
+            value={notifyOnNewContainers}
+            onValueChange={handleToggleNewContainers}
+            trackColor={{ false: '#999', true: theme.primary }}
+            disabled={!notificationsEnabled}
+          />
+        </View>
+
+        {expoPushToken ? (
+          <View
+            style={[
+              styles.tokenBox,
+              {
+                backgroundColor: theme.surfaceAlt,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <Text style={[styles.tokenLabel, { color: theme.textMuted }]}>
+              Expo Push Token
+            </Text>
+            <Text selectable style={[styles.tokenValue, { color: theme.text }]}>
+              {expoPushToken}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <TouchableOpacity
@@ -546,14 +744,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  notificationRow: {
+  notificationHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
   },
   notificationText: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  preferenceTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  preferenceText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  tokenBox: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: 12,
+    marginTop: 14,
+  },
+  tokenLabel: {
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  tokenValue: {
+    fontSize: 12,
   },
   logoutButton: {
     minHeight: 52,

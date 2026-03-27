@@ -7,6 +7,7 @@ import {
   Alert,
   Image,
   useColorScheme,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +16,10 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import ScimCamera from '@/components/ScimCam';
 
-import { insertContainer } from '@/components/database';
+import {
+  insertContainer,
+  updateContainerAiMetadata,
+} from '@/components/database';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { generateEmbeddingFromImage } from '@/components/aiTools';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
@@ -26,13 +30,30 @@ export default function CreateContainer() {
   const [name, setName] = useState('');
   const [photo, setPhoto] = useState<{ uri: string } | null>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
+  async function enrichContainerInBackground(
+    containerId: number,
+    localImageUri: string
+  ) {
+    try {
+      const { description, embedding } =
+        await generateEmbeddingFromImage(localImageUri);
+
+      updateContainerAiMetadata(containerId, embedding);
+    } catch (error: any) {
+      console.error('Background AI enrichment failed:', error);
+    }
+  }
+
   async function handleCreate() {
-    if (!name.trim()) {
-      Alert.alert('Missing Name', 'Please enter a container name.');
+    const finalName = name.trim();
+
+    if (!finalName) {
+      Alert.alert('Missing name', 'Please enter a container name.');
       return;
     }
 
@@ -42,22 +63,30 @@ export default function CreateContainer() {
     }
 
     try {
-      const savedFile = await savePhotoToScimFolder(photo.uri);
-      const { embedding } = await generateEmbeddingFromImage(savedFile.uri);
+      setIsSaving(true);
 
-      insertContainer(name.trim(), savedFile.uri, embedding);
+      const savedFile = await savePhotoToScimFolder(photo.uri);
+
+      const containerId = insertContainer(
+        finalName,
+        savedFile.uri,
+        null
+      );
+
+      void enrichContainerInBackground(containerId, savedFile.uri);
+
       router.back();
     } catch (error: any) {
       console.error('Failed to create container:', error);
-      console.error('message:', error?.message);
       Alert.alert('Error', error?.message ?? 'Failed to save container.');
+      setIsSaving(false);
     }
   }
 
   if (showCamera) {
     return (
       <ScimCamera
-        onPhotoTaken={(newPhoto) => {
+        onPhotoTaken={(newPhoto: { uri: string }) => {
           setPhoto(newPhoto);
           setShowCamera(false);
         }}
@@ -88,37 +117,40 @@ export default function CreateContainer() {
 
         <TextInput
           placeholder="Container name"
-          placeholderTextColor={theme.textSoft}
+          placeholderTextColor={theme.textMuted}
           value={name}
           onChangeText={setName}
+          editable={!isSaving}
           style={[
             styles.input,
             {
-              backgroundColor: theme.surface,
-              borderColor: theme.border,
               color: theme.text,
+              borderColor: theme.border,
+              backgroundColor: theme.background,
             },
           ]}
         />
 
         <TouchableOpacity
+          onPress={() => !isSaving && setShowCamera(true)}
+          activeOpacity={0.85}
           style={[
             styles.imageButton,
             {
-              backgroundColor: theme.secondary,
+              backgroundColor: theme.background,
               borderColor: theme.border,
+              opacity: isSaving ? 0.6 : 1,
             },
           ]}
-          onPress={() => setShowCamera(true)}
-          activeOpacity={0.85}
+          disabled={isSaving}
         >
           <Ionicons
-            name="camera-outline"
+            name={photo ? 'camera-reverse' : 'camera'}
             size={18}
-            color={theme.secondaryText}
+            color={theme.text}
             style={styles.buttonIcon}
           />
-          <ThemedText style={[styles.imageButtonText, { color: theme.secondaryText }]}>
+          <ThemedText style={[styles.imageButtonText, { color: theme.text }]}>
             {photo ? 'Retake Photo' : 'Take Photo'}
           </ThemedText>
         </TouchableOpacity>
@@ -129,32 +161,50 @@ export default function CreateContainer() {
             style={[
               styles.preview,
               {
-                backgroundColor: theme.surfaceAlt,
                 borderColor: theme.border,
+                backgroundColor: theme.background,
               },
             ]}
+            resizeMode="cover"
           />
         )}
 
         <TouchableOpacity
+          onPress={handleCreate}
+          activeOpacity={0.9}
+          disabled={isSaving}
           style={[
             styles.createButton,
             {
-              backgroundColor: theme.primary,
+              backgroundColor: theme.tint,
+              opacity: isSaving ? 0.8 : 1,
             },
           ]}
-          onPress={handleCreate}
-          activeOpacity={0.85}
         >
-          <Ionicons
-            name="add-circle-outline"
-            size={18}
-            color={theme.primaryText}
-            style={styles.buttonIcon}
-          />
-          <ThemedText style={[styles.createText, { color: theme.primaryText }]}>
-            Create Container
-          </ThemedText>
+          {isSaving ? (
+            <>
+              <ActivityIndicator
+                size="small"
+                color="#fff"
+                style={styles.buttonIcon}
+              />
+              <ThemedText style={[styles.createText, { color: '#fff' }]}>
+                Saving...
+              </ThemedText>
+            </>
+          ) : (
+            <>
+              <Ionicons
+                name="checkmark-circle"
+                size={18}
+                color="#fff"
+                style={styles.buttonIcon}
+              />
+              <ThemedText style={[styles.createText, { color: '#fff' }]}>
+                Create Container
+              </ThemedText>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </ThemedView>

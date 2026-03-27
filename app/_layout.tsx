@@ -5,8 +5,11 @@ import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
+import * as Notifications from 'expo-notifications';
+import type { EventSubscription, Notification, NotificationResponse } from 'expo-notifications';
+
 import { auth } from '../firebase';
 import { Colors } from '@/constants/theme';
 
@@ -16,6 +19,9 @@ export default function RootLayout() {
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const notificationListener = useRef<EventSubscription | null>(null);
+  const responseListener = useRef<EventSubscription | null>(null);
 
   const theme = Colors[colorScheme];
 
@@ -43,6 +49,43 @@ export default function RootLayout() {
     });
 
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    notificationListener.current =
+      Notifications.addNotificationReceivedListener((notification: Notification) => {
+        console.log('Notification received:', notification);
+      });
+
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener(
+        (response: NotificationResponse) => {
+          console.log('Notification tapped:', response);
+
+          const data = response.notification.request.content.data;
+          const screen = typeof data?.screen === 'string' ? data.screen : null;
+          const id = typeof data?.id === 'string' ? data.id : null;
+
+          if (screen === 'profile') {
+            router.push('/(tabs)/profile');
+            return;
+          }
+
+          if (screen === 'item' && id) {
+            router.push(`/item/${id}`);
+            return;
+          }
+
+          if (screen === 'container' && id) {
+            router.push(`/container/${id}`);
+          }
+        }
+      );
+
+    return () => {
+      notificationListener.current?.remove();
+      responseListener.current?.remove();
+    };
   }, []);
 
   useEffect(() => {

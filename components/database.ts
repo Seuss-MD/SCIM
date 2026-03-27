@@ -1,4 +1,3 @@
-// components/database.ts
 import * as SQLite from 'expo-sqlite';
 
 const db = SQLite.openDatabaseSync('scim.db');
@@ -132,10 +131,24 @@ export function insertContainer(
   name: string,
   imageUri: string | null,
   embedding: number[] | null
-) {
-  db.runSync(
+): number {
+  const result = db.runSync(
     `INSERT INTO containers (name, image_uri, embedding) VALUES (?, ?, ?)`,
     [name, imageUri, embedding ? JSON.stringify(embedding) : null]
+  );
+
+  return Number(result.lastInsertRowId);
+}
+
+export function updateContainerAiMetadata(
+  id: number,
+  embedding: number[] | null
+) {
+  db.runSync(
+    `UPDATE containers
+     SET embedding = ?
+     WHERE id = ?`,
+    [embedding ? JSON.stringify(embedding) : null, id]
   );
 }
 

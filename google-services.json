@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1031103113672",
+    "project_id": "scim-26227",
+    "storage_bucket": "scim-26227.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1031103113672:android:9c67a815d40863dff578fd",
+        "android_client_info": {
+          "package_name": "com.samlamev.camapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPHh20VwMwAZQv0MAoV27xIDbpHMBm-3c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
