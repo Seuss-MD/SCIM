@@ -15,7 +15,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import ScimCamera from '@/components/ScimCam';
-import { insertItem, updateItemAiMetadata } from '@/components/database';
+import {
+  insertItem,
+  updateItemAiMetadata,
+  getContainerById,
+  setItemCloudSync,
+} from '@/components/database';
+import { createCloudItem } from '@/components/cloudDatabase';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { generateEmbeddingFromImage } from '@/components/aiTools';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
@@ -32,12 +38,47 @@ export default function CreateItem() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
-  async function enrichItemInBackground(itemId: number, localImageUri: string) {
+  async function enrichItemInBackground(
+    localItemId: number,
+    localImageUri: string,
+    finalName: string,
+    localContainerId: number | null
+  ) {
+    const containerCloudId =
+      typeof localContainerId === 'number'
+        ? getContainerById(localContainerId)?.cloud_id ?? null
+        : null;
+
+    let description: string | null = null;
+    let embedding: number[] | null = null;
+    let imageUrl: string | null = null;
+
     try {
-      const { description, embedding } = await generateEmbeddingFromImage(localImageUri);
-      updateItemAiMetadata(itemId, description, embedding);
+      const ai = await generateEmbeddingFromImage(localImageUri);
+
+      description = ai?.description ?? null;
+      embedding = ai?.embedding ?? null;
+      imageUrl = ai?.imageUrl ?? null;
+
+      updateItemAiMetadata(localItemId, description, embedding);
     } catch (error: any) {
       console.error('Background AI enrichment failed:', error);
+    }
+
+    try {
+      const cloud = await createCloudItem({
+        name: finalName,
+        description,
+        imageUrl,
+        localImageUri,
+        containerId: containerCloudId,
+        embedding,
+        tags: [],
+      });
+
+      setItemCloudSync(localItemId, cloud.id, containerCloudId);
+    } catch (error: any) {
+      console.error('Cloud item save failed:', error);
     }
   }
 
@@ -81,7 +122,12 @@ export default function CreateItem() {
         null
       );
 
-      void enrichItemInBackground(itemId, savedFile.uri);
+      void enrichItemInBackground(
+        itemId,
+        savedFile.uri,
+        finalName,
+        parsedContainerId
+      );
 
       router.back();
     } catch (error: any) {

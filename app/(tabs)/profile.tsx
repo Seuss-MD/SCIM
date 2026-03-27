@@ -311,9 +311,6 @@ export default function ProfileScreen() {
     >
       <View style={styles.headerBlock}>
         <Text style={[styles.title, { color: theme.text }]}>Profile</Text>
-        <Text style={[styles.subtitle, { color: theme.textMuted }]}>
-          Manage your account, groups, and notifications
-        </Text>
       </View>
 
       <View
@@ -646,14 +643,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   title: {
-    fontSize: 30,
+    paddingTop: Spacing.lg,
+    fontSize: 48,
     fontWeight: '800',
     letterSpacing: -0.5,
     marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 52,
   },
   profileCard: {
     borderRadius: Radius.lg,

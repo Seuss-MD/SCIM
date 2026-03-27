@@ -19,7 +19,9 @@ import ScimCamera from '@/components/ScimCam';
 import {
   insertContainer,
   updateContainerAiMetadata,
+  setContainerCloudSync,
 } from '@/components/database';
+import { createCloudContainer } from '@/components/cloudDatabase';
 import { savePhotoToScimFolder } from '@/components/fileSystem';
 import { generateEmbeddingFromImage } from '@/components/aiTools';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
@@ -36,16 +38,35 @@ export default function CreateContainer() {
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
   async function enrichContainerInBackground(
-    containerId: number,
-    localImageUri: string
+    localContainerId: number,
+    localImageUri: string,
+    finalName: string
   ) {
-    try {
-      const { description, embedding } =
-        await generateEmbeddingFromImage(localImageUri);
+    let embedding: number[] | null = null;
+    let imageUrl: string | null = null;
 
-      updateContainerAiMetadata(containerId, embedding);
+    try {
+      const ai = await generateEmbeddingFromImage(localImageUri);
+
+      embedding = ai?.embedding ?? null;
+      imageUrl = ai?.imageUrl ?? null;
+
+      updateContainerAiMetadata(localContainerId, embedding);
     } catch (error: any) {
       console.error('Background AI enrichment failed:', error);
+    }
+
+    try {
+      const cloud = await createCloudContainer({
+        name: finalName,
+        imageUrl,
+        localImageUri,
+        embedding,
+      });
+
+      setContainerCloudSync(localContainerId, cloud.id);
+    } catch (error: any) {
+      console.error('Cloud container save failed:', error);
     }
   }
 
@@ -73,7 +94,7 @@ export default function CreateContainer() {
         null
       );
 
-      void enrichContainerInBackground(containerId, savedFile.uri);
+      void enrichContainerInBackground(containerId, savedFile.uri, finalName);
 
       router.back();
     } catch (error: any) {

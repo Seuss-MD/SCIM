@@ -1,4 +1,3 @@
-// app/(tabs)/_layout.tsx
 import { Tabs } from 'expo-router';
 import React, { useEffect } from 'react';
 import { Platform } from 'react-native';
@@ -20,20 +19,16 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
+        tabBarActiveTintColor: theme.tint,
+        tabBarInactiveTintColor: theme.textMuted,
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarActiveTintColor: theme.tabIconSelected,
-        tabBarInactiveTintColor: theme.tabIconDefault,
-        tabBarShowLabel: true,
-        tabBarStyle: {
-          backgroundColor: theme.surface,
-          borderTopColor: theme.border,
-          borderTopWidth: 1,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '600',
-        },
+        tabBarStyle: Platform.select({
+          ios: {
+            position: 'absolute',
+          },
+          default: {},
+        }),
       }}
     >
       <Tabs.Screen
@@ -58,7 +53,21 @@ export default function TabLayout() {
             <Ionicons
               size={24}
               color={color}
-              name={focused ? 'folder' : 'folder-outline'}
+              name={focused ? 'cube' : 'cube-outline'}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="sync"
+        options={{
+          title: 'Sync',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              size={24}
+              color={color}
+              name={focused ? 'sync-circle' : 'sync-circle-outline'}
             />
           ),
         }}
