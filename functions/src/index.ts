@@ -177,13 +177,14 @@ export const generateImageEmbedding = onCall(
 );
 
 export const notifyOnItemCreated = onDocumentCreated(
-  "items/{itemId}",
+  "workspaces/{workspaceId}/items/{itemId}",
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
 
     const item = snapshot.data();
     const itemId = event.params.itemId;
+    const workspaceId = event.params.workspaceId;
 
     const users = await getUsersToNotify("notifyOnNewItems");
 
@@ -197,6 +198,7 @@ export const notifyOnItemCreated = onDocumentCreated(
       data: {
         screen: "item",
         id: itemId,
+        workspaceId,
       },
     }));
 
@@ -205,13 +207,14 @@ export const notifyOnItemCreated = onDocumentCreated(
 );
 
 export const notifyOnContainerCreated = onDocumentCreated(
-  "containers/{containerId}",
+  "workspaces/{workspaceId}/containers/{containerId}",
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
 
     const container = snapshot.data();
     const containerId = event.params.containerId;
+    const workspaceId = event.params.workspaceId;
 
     const users = await getUsersToNotify("notifyOnNewContainers");
 
@@ -225,6 +228,7 @@ export const notifyOnContainerCreated = onDocumentCreated(
       data: {
         screen: "container",
         id: containerId,
+        workspaceId,
       },
     }));
 
