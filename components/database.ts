@@ -1,6 +1,14 @@
 import * as SQLite from 'expo-sqlite';
 
 const db = SQLite.openDatabaseSync('scim.db');
+export function resetDatabase() {
+  db.execSync(`
+    DROP TABLE IF EXISTS items;
+    DROP TABLE IF EXISTS containers;
+  `);
+
+  initDatabase();
+}
 
 export type Container = {
   id: number;
@@ -33,8 +41,8 @@ export type Item = {
 function safeAlter(sql: string) {
   try {
     db.execSync(sql);
-  } catch {
-    // column already exists
+  } catch (error) {
+    //console.log('ALTER failed:', sql, error);
   }
 }
 
@@ -75,8 +83,8 @@ export function initDatabase() {
   safeAlter(`ALTER TABLE containers ADD COLUMN embedding TEXT;`);
   safeAlter(`ALTER TABLE containers ADD COLUMN created_by TEXT;`);
   safeAlter(`ALTER TABLE containers ADD COLUMN updated_by TEXT;`);
-  safeAlter(`ALTER TABLE containers ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
-  safeAlter(`ALTER TABLE containers ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
+  safeAlter(`ALTER TABLE containers ADD COLUMN created_at TEXT;`);
+  safeAlter(`ALTER TABLE containers ADD COLUMN updated_at TEXT;`);
 
   safeAlter(`ALTER TABLE items ADD COLUMN cloud_id TEXT;`);
   safeAlter(`ALTER TABLE items ADD COLUMN description TEXT;`);
@@ -86,8 +94,22 @@ export function initDatabase() {
   safeAlter(`ALTER TABLE items ADD COLUMN tags TEXT;`);
   safeAlter(`ALTER TABLE items ADD COLUMN created_by TEXT;`);
   safeAlter(`ALTER TABLE items ADD COLUMN updated_by TEXT;`);
-  safeAlter(`ALTER TABLE items ADD COLUMN created_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
-  safeAlter(`ALTER TABLE items ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP;`);
+  safeAlter(`ALTER TABLE items ADD COLUMN created_at TEXT;`);
+  safeAlter(`ALTER TABLE items ADD COLUMN updated_at TEXT;`);
+
+  db.execSync(`
+    UPDATE containers
+    SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP);
+
+    UPDATE containers
+    SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP);
+
+    UPDATE items
+    SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP);
+
+    UPDATE items
+    SET updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP);
+  `);
 }
 
 export function insertItem(
@@ -400,4 +422,12 @@ export function searchContainersByEmbedding(
     .filter((container) => container.similarity >= 0)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
+}
+
+export function debugPrintSchema() {
+  const containerCols = db.getAllSync(`PRAGMA table_info(containers)`);
+  const itemCols = db.getAllSync(`PRAGMA table_info(items)`);
+
+  console.log('containers schema:', JSON.stringify(containerCols, null, 2));
+  console.log('items schema:', JSON.stringify(itemCols, null, 2));
 }
