@@ -13,7 +13,19 @@ import {
   ScrollView,
 } from 'react-native';
 import { signOut, updateEmail, updatePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  addDoc,
+  arrayUnion,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -43,9 +55,17 @@ export default function ProfileScreen() {
 
   const [createGroupName, setCreateGroupName] = useState('');
   const [joinGroupCode, setJoinGroupCode] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [joiningGroup, setJoiningGroup] = useState(false);
+
+  const [groupId, setGroupId] = useState<string | null>(null);
+  const [groupName, setGroupName] = useState<string | null>(null);
+  const [groupCode, setGroupCode] = useState<string | null>(null);
+
+  const isInGroup = Boolean(groupId || groupName || groupCode);
 
   useEffect(() => {
-    const loadNotificationPrefs = async () => {
+    const loadUserPrefs = async () => {
       if (!auth.currentUser) {
         setLoadingPrefs(false);
         return;
@@ -62,16 +82,64 @@ export default function ProfileScreen() {
           setNotifyOnNewItems(data.notifyOnNewItems !== false);
           setNotifyOnNewContainers(data.notifyOnNewContainers !== false);
           setExpoPushToken(data.expoPushToken ?? null);
+
+          const loadedGroupId =
+            typeof data.groupId === 'string'
+              ? data.groupId
+              : typeof data.group?.id === 'string'
+              ? data.group.id
+              : null;
+
+          const loadedGroupName =
+            typeof data.groupName === 'string'
+              ? data.groupName
+              : typeof data.group?.name === 'string'
+              ? data.group.name
+              : null;
+
+          const loadedGroupCode =
+            typeof data.groupCode === 'string'
+              ? data.groupCode
+              : typeof data.group?.code === 'string'
+              ? data.group.code
+              : null;
+
+          setGroupId(loadedGroupId);
+          setGroupName(loadedGroupName);
+          setGroupCode(loadedGroupCode);
         }
       } catch (error) {
-        console.error('Failed to load notification prefs:', error);
+        console.error('Failed to load user prefs:', error);
       } finally {
         setLoadingPrefs(false);
       }
     };
 
-    loadNotificationPrefs();
+    loadUserPrefs();
   }, []);
+
+  const generateRandomGroupCode = (length = 6) => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let result = '';
+
+    for (let i = 0; i < length; i += 1) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    return result;
+  };
+
+  const getUniqueGroupCode = async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const code = generateRandomGroupCode(6);
+      const q = query(collection(db, 'groups'), where('code', '==', code));
+      const snap = await getDocs(q);
+
+      if (snap.empty) return code;
+    }
+
+    throw new Error('Could not generate a unique group code. Please try again.');
+  };
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -128,7 +196,7 @@ export default function ProfileScreen() {
     try {
       setSavingEmail(true);
       await updateEmail(auth.currentUser, newEmail.trim());
-      Alert.alert('Success', 'Your email has been updated.');
+      Alert.alert('Success', 'Email updated.');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Could not update email.');
     } finally {
@@ -143,7 +211,7 @@ export default function ProfileScreen() {
       setSavingPassword(true);
       await updatePassword(auth.currentUser, newPassword.trim());
       setNewPassword('');
-      Alert.alert('Success', 'Your password has been updated.');
+      Alert.alert('Success', 'Password updated.');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Could not update password.');
     } finally {
@@ -151,7 +219,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const saveNotificationPrefs = async (updates: Record<string, unknown>) => {
+  const saveUserPrefs = async (updates: Record<string, unknown>) => {
     if (!auth.currentUser) return;
 
     await setDoc(
@@ -179,17 +247,14 @@ export default function ProfileScreen() {
       setExpoPushToken(token);
       setNotificationsEnabled(true);
 
-      await saveNotificationPrefs({
+      await saveUserPrefs({
         expoPushToken: token,
         notificationsEnabled: true,
         notifyOnNewItems,
         notifyOnNewContainers,
       });
 
-      Alert.alert(
-        'Notifications enabled',
-        'Push notifications are enabled on this device.'
-      );
+      Alert.alert('Notifications on', 'Push notifications are enabled.');
     } catch (error: any) {
       setNotificationsEnabled(false);
       Alert.alert(
@@ -209,7 +274,7 @@ export default function ProfileScreen() {
     }
 
     try {
-      await saveNotificationPrefs({
+      await saveUserPrefs({
         notificationsEnabled: false,
         expoPushToken: null,
       });
@@ -217,15 +282,9 @@ export default function ProfileScreen() {
       setNotificationsEnabled(false);
       setExpoPushToken(null);
 
-      Alert.alert(
-        'Notifications disabled',
-        'Push notifications were disabled for this device.'
-      );
+      Alert.alert('Notifications off', 'Push notifications are disabled.');
     } catch (error: any) {
-      Alert.alert(
-        'Error',
-        error?.message ?? 'Could not disable notifications.'
-      );
+      Alert.alert('Error', error?.message ?? 'Could not disable notifications.');
     }
   };
 
@@ -241,7 +300,7 @@ export default function ProfileScreen() {
     setNotifyOnNewItems(value);
 
     try {
-      await saveNotificationPrefs({
+      await saveUserPrefs({
         notifyOnNewItems: value,
       });
     } catch (error: any) {
@@ -254,7 +313,7 @@ export default function ProfileScreen() {
     setNotifyOnNewContainers(value);
 
     try {
-      await saveNotificationPrefs({
+      await saveUserPrefs({
         notifyOnNewContainers: value,
       });
     } catch (error: any) {
@@ -263,27 +322,117 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCreateGroup = () => {
-    if (!createGroupName.trim()) {
+  const handleCreateGroup = async () => {
+    if (!auth.currentUser) {
+      Alert.alert('Not signed in', 'You need to be signed in first.');
+      return;
+    }
+
+    const trimmedName = createGroupName.trim();
+
+    if (!trimmedName) {
       Alert.alert('Missing group name', 'Enter a group name first.');
       return;
     }
 
-    Alert.alert(
-      'Group created',
-      `Group "${createGroupName.trim()}" was created.`
-    );
-    setCreateGroupName('');
+    if (isInGroup) {
+      Alert.alert('Already in a group', 'Leave your current group first.');
+      return;
+    }
+
+    try {
+      setCreatingGroup(true);
+
+      const code = await getUniqueGroupCode();
+
+      const groupRef = await addDoc(collection(db, 'groups'), {
+        name: trimmedName,
+        code,
+        ownerId: auth.currentUser.uid,
+        members: [auth.currentUser.uid],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      await saveUserPrefs({
+        groupId: groupRef.id,
+        groupName: trimmedName,
+        groupCode: code,
+      });
+
+      setGroupId(groupRef.id);
+      setGroupName(trimmedName);
+      setGroupCode(code);
+      setCreateGroupName('');
+
+      Alert.alert('Group created', `You joined "${trimmedName}".`);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Could not create group.');
+    } finally {
+      setCreatingGroup(false);
+    }
   };
 
-  const handleJoinGroup = () => {
-    if (!joinGroupCode.trim()) {
+  const handleJoinGroup = async () => {
+    if (!auth.currentUser) {
+      Alert.alert('Not signed in', 'You need to be signed in first.');
+      return;
+    }
+
+    const trimmedCode = joinGroupCode.trim().toUpperCase();
+
+    if (!trimmedCode) {
       Alert.alert('Missing code', 'Enter a group code first.');
       return;
     }
 
-    Alert.alert('Joined group', `Joined group with code ${joinGroupCode.trim()}.`);
-    setJoinGroupCode('');
+    if (isInGroup) {
+      Alert.alert('Already in a group', 'Leave your current group first.');
+      return;
+    }
+
+    try {
+      setJoiningGroup(true);
+
+      const q = query(collection(db, 'groups'), where('code', '==', trimmedCode));
+      const snap = await getDocs(q);
+
+      if (snap.empty) {
+        Alert.alert('Group not found', 'That code does not exist.');
+        return;
+      }
+
+      const groupDoc = snap.docs[0];
+      const groupData = groupDoc.data();
+
+      await updateDoc(doc(db, 'groups', groupDoc.id), {
+        members: arrayUnion(auth.currentUser.uid),
+        updatedAt: serverTimestamp(),
+      });
+
+      await saveUserPrefs({
+        groupId: groupDoc.id,
+        groupName:
+          typeof groupData.name === 'string' ? groupData.name : 'Group',
+        groupCode:
+          typeof groupData.code === 'string' ? groupData.code : trimmedCode,
+      });
+
+      setGroupId(groupDoc.id);
+      setGroupName(
+        typeof groupData.name === 'string' ? groupData.name : 'Group'
+      );
+      setGroupCode(
+        typeof groupData.code === 'string' ? groupData.code : trimmedCode
+      );
+      setJoinGroupCode('');
+
+      Alert.alert('Joined group', 'You joined successfully.');
+    } catch (error: any) {
+      Alert.alert('Error', error?.message ?? 'Could not join group.');
+    } finally {
+      setJoiningGroup(false);
+    }
   };
 
   if (loading || loadingPrefs) {
@@ -317,7 +466,7 @@ export default function ProfileScreen() {
         style={[
           styles.profileCard,
           {
-            backgroundColor: theme.surfaceAlt,
+            backgroundColor: theme.surface,
             borderColor: theme.border,
           },
         ]}
@@ -325,13 +474,13 @@ export default function ProfileScreen() {
         <View
           style={[
             styles.avatarOuter,
-            { backgroundColor: theme.surface, borderColor: theme.border },
+            { backgroundColor: theme.surfaceAlt, borderColor: theme.border },
           ]}
         >
           {profileImage ? (
             <Image source={{ uri: profileImage }} style={styles.avatarImage} />
           ) : (
-            <Ionicons name="person-outline" size={34} color={theme.text} />
+            <Ionicons name="person-outline" size={30} color={theme.text} />
           )}
         </View>
 
@@ -347,257 +496,271 @@ export default function ProfileScreen() {
 
       <View
         style={[
-          styles.section,
+          styles.mainCard,
           {
             backgroundColor: theme.surface,
             borderColor: theme.border,
           },
         ]}
       >
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>
-          Profile Info
-        </Text>
+        <Text style={[styles.cardTitle, { color: theme.text }]}>Settings</Text>
 
-        <Text style={[styles.label, { color: theme.textMuted }]}>
-          Profile Picture
-        </Text>
-
-        <View style={styles.photoActionsRow}>
-          <TouchableOpacity
-            style={[styles.smallButton, { backgroundColor: theme.primary }]}
-            onPress={pickImageFromLibrary}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="images-outline" size={16} color="#fff" />
-            <Text style={styles.smallButtonText}>Upload</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.smallButton, { backgroundColor: theme.primary }]}
-            onPress={takePhotoWithCamera}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="camera-outline" size={16} color="#fff" />
-            <Text style={styles.smallButtonText}>Take Photo</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={[styles.label, { color: theme.textMuted }]}>
-          Change Email
-        </Text>
-        <TextInput
+        <View
           style={[
-            styles.input,
+            styles.block,
             {
               backgroundColor: theme.surfaceAlt,
               borderColor: theme.border,
-              color: theme.text,
             },
           ]}
-          placeholder="Enter new email"
-          placeholderTextColor={theme.textMuted}
-          value={newEmail}
-          onChangeText={setNewEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.primary }]}
-          onPress={handleChangeEmail}
-          activeOpacity={0.85}
-          disabled={savingEmail}
         >
-          <Text style={styles.actionButtonText}>
-            {savingEmail ? 'Updating...' : 'Update Email'}
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={[styles.label, { color: theme.textMuted, marginTop: 16 }]}>
-          Change Password
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.surfaceAlt,
-              borderColor: theme.border,
-              color: theme.text,
-            },
-          ]}
-          placeholder="Enter new password"
-          placeholderTextColor={theme.textMuted}
-          value={newPassword}
-          onChangeText={setNewPassword}
-          secureTextEntry
-        />
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.primary }]}
-          onPress={handleChangePassword}
-          activeOpacity={0.85}
-          disabled={savingPassword}
-        >
-          <Text style={styles.actionButtonText}>
-            {savingPassword ? 'Updating...' : 'Update Password'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[
-          styles.section,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>
-          Create Group
-        </Text>
-
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.surfaceAlt,
-              borderColor: theme.border,
-              color: theme.text,
-            },
-          ]}
-          placeholder="Enter group name"
-          placeholderTextColor={theme.textMuted}
-          value={createGroupName}
-          onChangeText={setCreateGroupName}
-        />
-
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.primary }]}
-          onPress={handleCreateGroup}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionButtonText}>Create Group</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[
-          styles.section,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>
-          Join Group
-        </Text>
-
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.surfaceAlt,
-              borderColor: theme.border,
-              color: theme.text,
-            },
-          ]}
-          placeholder="Enter invite code"
-          placeholderTextColor={theme.textMuted}
-          value={joinGroupCode}
-          onChangeText={setJoinGroupCode}
-          autoCapitalize="characters"
-        />
-
-        <TouchableOpacity
-          style={[styles.actionButton, { backgroundColor: theme.primary }]}
-          onPress={handleJoinGroup}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.actionButtonText}>Join Group</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[
-          styles.section,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <View style={styles.notificationHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>
-              Notifications
-            </Text>
-            <Text style={[styles.notificationText, { color: theme.textMuted }]}>
-              Choose which alerts you want
-            </Text>
+          <View style={styles.blockHeader}>
+            <Text style={[styles.blockTitle, { color: theme.text }]}>Photo</Text>
           </View>
 
-          <Switch
-            value={notificationsEnabled}
-            onValueChange={handleToggleNotifications}
-            trackColor={{ false: '#999', true: theme.primary }}
-            disabled={registeringPush}
-          />
+          <View style={styles.photoActionsRow}>
+            <TouchableOpacity
+              style={[styles.smallButton, { backgroundColor: theme.primary }]}
+              onPress={pickImageFromLibrary}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="images-outline" size={16} color="#fff" />
+              <Text style={styles.smallButtonText}>Upload</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.smallButton, { backgroundColor: theme.primary }]}
+              onPress={takePhotoWithCamera}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="camera-outline" size={16} color="#fff" />
+              <Text style={styles.smallButtonText}>Camera</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.preferenceRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.preferenceTitle, { color: theme.text }]}>
-              New items
-            </Text>
-            <Text style={[styles.preferenceText, { color: theme.textMuted }]}>
-              Notify me when an item is added
-            </Text>
+        <View
+          style={[
+            styles.block,
+            {
+              backgroundColor: theme.surfaceAlt,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <View style={styles.blockHeader}>
+            <Text style={[styles.blockTitle, { color: theme.text }]}>Email</Text>
           </View>
 
-          <Switch
-            value={notifyOnNewItems}
-            onValueChange={handleToggleNewItems}
-            trackColor={{ false: '#999', true: theme.primary }}
-            disabled={!notificationsEnabled}
-          />
-        </View>
-
-        <View style={styles.preferenceRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.preferenceTitle, { color: theme.text }]}>
-              New containers
-            </Text>
-            <Text style={[styles.preferenceText, { color: theme.textMuted }]}>
-              Notify me when a container is created
-            </Text>
-          </View>
-
-          <Switch
-            value={notifyOnNewContainers}
-            onValueChange={handleToggleNewContainers}
-            trackColor={{ false: '#999', true: theme.primary }}
-            disabled={!notificationsEnabled}
-          />
-        </View>
-
-        {expoPushToken ? (
-          <View
+          <TextInput
             style={[
-              styles.tokenBox,
+              styles.input,
               {
-                backgroundColor: theme.surfaceAlt,
+                backgroundColor: theme.surface,
                 borderColor: theme.border,
+                color: theme.text,
               },
             ]}
+            placeholder="New email"
+            placeholderTextColor={theme.textMuted}
+            value={newEmail}
+            onChangeText={setNewEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: theme.primary }]}
+            onPress={handleChangeEmail}
+            activeOpacity={0.88}
+            disabled={savingEmail}
           >
-            <Text style={[styles.tokenLabel, { color: theme.textMuted }]}>
-              Expo Push Token
+            <Text style={styles.actionButtonText}>
+              {savingEmail ? 'Saving...' : 'Update Email'}
             </Text>
-            <Text selectable style={[styles.tokenValue, { color: theme.text }]}>
-              {expoPushToken}
+          </TouchableOpacity>
+        </View>
+
+        <View
+          style={[
+            styles.block,
+            {
+              backgroundColor: theme.surfaceAlt,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <View style={styles.blockHeader}>
+            <Text style={[styles.blockTitle, { color: theme.text }]}>
+              Password
             </Text>
           </View>
-        ) : null}
+
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+                color: theme.text,
+              },
+            ]}
+            placeholder="New password"
+            placeholderTextColor={theme.textMuted}
+            value={newPassword}
+            onChangeText={setNewPassword}
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={[styles.actionButton, { backgroundColor: theme.primary }]}
+            onPress={handleChangePassword}
+            activeOpacity={0.88}
+            disabled={savingPassword}
+          >
+            <Text style={styles.actionButtonText}>
+              {savingPassword ? 'Saving...' : 'Update Password'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View
+          style={[
+            styles.block,
+            {
+              backgroundColor: theme.surfaceAlt,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <View style={styles.switchRow}>
+            <Text style={[styles.blockTitle, { color: theme.text }]}>
+              Notifications
+            </Text>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              trackColor={{ false: '#999', true: theme.primary }}
+              disabled={registeringPush}
+            />
+          </View>
+
+          <View style={styles.preferenceRow}>
+            <Text style={[styles.preferenceLabel, { color: theme.text }]}>
+              New items
+            </Text>
+            <Switch
+              value={notifyOnNewItems}
+              onValueChange={handleToggleNewItems}
+              trackColor={{ false: '#999', true: theme.primary }}
+              disabled={!notificationsEnabled}
+            />
+          </View>
+
+          <View style={[styles.preferenceRow, { marginBottom: 0 }]}>
+            <Text style={[styles.preferenceLabel, { color: theme.text }]}>
+              New containers
+            </Text>
+            <Switch
+              value={notifyOnNewContainers}
+              onValueChange={handleToggleNewContainers}
+              trackColor={{ false: '#999', true: theme.primary }}
+              disabled={!notificationsEnabled}
+            />
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.block,
+            {
+              backgroundColor: theme.surfaceAlt,
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <View style={styles.blockHeader}>
+            <Text style={[styles.blockTitle, { color: theme.text }]}>Group</Text>
+          </View>
+
+          {isInGroup ? (
+            <View style={styles.groupInfoWrap}>
+              <View style={styles.groupInfoRow}>
+                <Text style={[styles.groupKey, { color: theme.textMuted }]}>
+                  Name
+                </Text>
+                <Text style={[styles.groupValue, { color: theme.text }]}>
+                  {groupName || '—'}
+                </Text>
+              </View>
+
+              <View style={styles.groupInfoRow}>
+                <Text style={[styles.groupKey, { color: theme.textMuted }]}>
+                  Code
+                </Text>
+                <Text style={[styles.groupValue, { color: theme.text }]}>
+                  {groupCode || '—'}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    color: theme.text,
+                  },
+                ]}
+                placeholder="Group name"
+                placeholderTextColor={theme.textMuted}
+                value={createGroupName}
+                onChangeText={setCreateGroupName}
+              />
+
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                onPress={handleCreateGroup}
+                activeOpacity={0.88}
+                disabled={creatingGroup}
+              >
+                <Text style={styles.actionButtonText}>
+                  {creatingGroup ? 'Creating...' : 'Create Group'}
+                </Text>
+              </TouchableOpacity>
+
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    color: theme.text,
+                    marginTop: 12,
+                  },
+                ]}
+                placeholder="Invite code"
+                placeholderTextColor={theme.textMuted}
+                value={joinGroupCode}
+                onChangeText={setJoinGroupCode}
+                autoCapitalize="characters"
+              />
+
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                onPress={handleJoinGroup}
+                activeOpacity={0.88}
+                disabled={joiningGroup}
+              >
+                <Text style={styles.actionButtonText}>
+                  {joiningGroup ? 'Joining...' : 'Join Group'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
 
       <TouchableOpacity
@@ -608,7 +771,7 @@ export default function ProfileScreen() {
           },
         ]}
         onPress={handleLogout}
-        activeOpacity={0.85}
+        activeOpacity={0.88}
       >
         <Ionicons
           name="log-out-outline"
@@ -640,30 +803,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   headerBlock: {
-    marginBottom: Spacing.xl,
+    marginBottom: 18,
   },
   title: {
     paddingTop: Spacing.lg,
-    fontSize: 48,
+    fontSize: 42,
     fontWeight: '800',
     letterSpacing: -0.5,
-    marginBottom: 6,
-    lineHeight: 52,
+    lineHeight: 46,
   },
   profileCard: {
     borderRadius: Radius.lg,
-    padding: 20,
+    padding: 18,
     borderWidth: 1,
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: 14,
     ...Shadows.card,
   },
   avatarOuter: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -677,28 +839,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   nameText: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '900',
     marginBottom: 4,
   },
   emailText: {
     fontSize: 14,
   },
-  label: {
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  section: {
+  mainCard: {
     borderRadius: Radius.lg,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
-    marginBottom: Spacing.lg,
+    marginBottom: 16,
+    gap: 12,
     ...Shadows.card,
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 12,
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    marginBottom: 2,
+    paddingHorizontal: 4,
+  },
+  block: {
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: 14,
+  },
+  blockHeader: {
+    marginBottom: 10,
+  },
+  blockTitle: {
+    fontSize: 22,
+    fontWeight: '900',
   },
   input: {
     minHeight: 48,
@@ -706,14 +878,13 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     paddingHorizontal: 14,
     fontSize: 15,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   actionButton: {
     minHeight: 48,
     borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
   },
   actionButtonText: {
     color: '#fff',
@@ -722,8 +893,7 @@ const styles = StyleSheet.create({
   },
   photoActionsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 14,
+    gap: 10,
   },
   smallButton: {
     flexDirection: 'row',
@@ -739,44 +909,40 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  notificationHeaderRow: {
+  switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  notificationText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
   preferenceRow: {
+    minHeight: 48,
+    borderRadius: Radius.md,
+    paddingHorizontal: 2,
+    marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 14,
-    paddingBottom: 8,
   },
-  preferenceTitle: {
+  preferenceLabel: {
     fontSize: 15,
-    fontWeight: '700',
-    marginBottom: 2,
+    fontWeight: '600',
   },
-  preferenceText: {
-    fontSize: 13,
-    lineHeight: 18,
+  groupInfoWrap: {
+    gap: 12,
   },
-  tokenBox: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: 12,
-    marginTop: 14,
+  groupInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  tokenLabel: {
-    fontSize: 13,
-    marginBottom: 6,
+  groupKey: {
+    fontSize: 14,
+    fontWeight: '600',
   },
-  tokenValue: {
-    fontSize: 12,
+  groupValue: {
+    fontSize: 15,
+    fontWeight: '800',
   },
   logoutButton: {
     minHeight: 52,
@@ -784,7 +950,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    marginTop: Spacing.sm,
+    marginTop: 2,
     marginBottom: Spacing.lg,
   },
   logoutIcon: {

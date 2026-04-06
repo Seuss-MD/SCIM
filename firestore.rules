@@ -10,6 +10,10 @@ service cloud.firestore {
       allow read, write: if signedIn() && request.auth.uid == userId;
     }
 
+    match /groups/{groupId} {
+      allow read, write: if signedIn();
+    }
+
     match /workspaces/{workspaceId} {
       allow read, write: if signedIn() && request.auth.uid == workspaceId;
 
