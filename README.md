@@ -1,50 +1,101 @@
-# Welcome to your Expo app 👋
+# SCIM
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+**SCIM** is a mobile inventory app built with **Expo / React Native** for tracking containers and items with photos, AI-powered semantic search, local-first storage, and Firebase cloud sync.
 
-## Get started
+The current project focuses on making home or personal inventory easier to capture and find later:
+- take a photo of an item or container
+- save it locally on the device
+- enrich it with AI-generated descriptions and embeddings
+- search by text or image similarity
+- sync missing data to Firebase
+- receive push notifications when new items or containers are added in the cloud
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## What the app does
 
-2. Start the app
+### Core features
+- **Email/password authentication** with Firebase Auth
+- **Local-first inventory storage** using SQLite
+- **Create containers and items** with camera photos
+- **Semantic search** using either:
+  - text queries
+  - image queries from camera or gallery
+- **AI enrichment** for item descriptions and embeddings
+- **Cloud sync** between local SQLite data and Firebase
+- **Push notifications** for newly created cloud items and containers
+- **Profile settings** for account changes and notification preferences
 
-   ```bash
-   npx expo start
-   ```
+### Current behavior
+- Sync currently handles **missing-record push/pull only**
+- Sync **does not merge edits or deletes yet**
+- Loose items are visually separated from items already placed in a container
+- Group creation / join UI appears to be in progress and is not yet a documented end-to-end feature
 
-In the output, you'll find options to open the app in a
+---
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Tech stack
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Frontend
+- Expo SDK 54
+- React Native 0.81
+- React 19
+- Expo Router
+- TypeScript
 
-## Get a fresh project
+### Device / mobile features
+- `expo-camera`
+- `expo-image-picker`
+- `expo-file-system`
+- `expo-sqlite`
+- `expo-notifications`
 
-When you're ready, run:
+### Backend / cloud
+- Firebase Authentication
+- Cloud Firestore
+- Firebase Storage
+- Firebase Cloud Functions (2nd gen APIs)
+- OpenAI API for descriptions and embeddings
 
-```bash
-npm run reset-project
-```
+---
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
-## Learn more
+## How search works
 
-To learn more about developing your project with Expo, look at the following resources:
+SCIM uses embeddings to make inventory search more flexible than exact keyword matching.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Text search
+A text query is converted into an embedding, then compared against stored item embeddings using cosine similarity.
 
-## Join the community
+### Image search
+A captured or selected image is described by AI, converted into an embedding, and matched against saved items.
 
-Join our community of developers creating universal apps.
+This lets users find objects even when they do not remember the exact item name.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
+
+## Local data model
+
+The app stores data locally in SQLite using two main tables:
+- `containers`
+- `items`
+
+Items store:
+- name
+- description
+- image URI
+- container relationship
+- embedding
+- tags
+- cloud sync metadata
+- timestamps
+
+Containers store:
+- name
+- image URI
+- embedding
+- cloud sync metadata
+- timestamps
+
+---
+
