@@ -90,9 +90,6 @@ export default function SyncScreen() {
           )}
         </TouchableOpacity>
 
-        <ThemedText style={[styles.statusText, { color: theme.textMuted }]}>
-          {status}
-        </ThemedText>
 
         <View style={styles.statsRow}>
           <View
@@ -108,7 +105,7 @@ export default function SyncScreen() {
               {totalItemsSynced}
             </ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Items synced
+              Items 
             </ThemedText>
           </View>
 
@@ -125,39 +122,12 @@ export default function SyncScreen() {
               {totalContainersSynced}
             </ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Containers synced
+              Containers 
             </ThemedText>
           </View>
         </View>
 
-        <View
-          style={[
-            styles.listBox,
-            {
-              backgroundColor: theme.background,
-              borderColor: theme.border,
-            },
-          ]}
-        >
-          <ThemedText style={[styles.listTitle, { color: theme.text }]}>
-            Synced containers
-          </ThemedText>
 
-          {syncedContainerNames.length > 0 ? (
-            syncedContainerNames.map((name, index) => (
-              <ThemedText
-                key={`${name}-${index}`}
-                style={[styles.listItem, { color: theme.textMuted }]}
-              >
-                • {name}
-              </ThemedText>
-            ))
-          ) : (
-            <ThemedText style={[styles.listItem, { color: theme.textMuted }]}>
-              No containers synced yet
-            </ThemedText>
-          )}
-        </View>
       </View>
     </ThemedView>
   );
