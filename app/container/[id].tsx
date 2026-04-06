@@ -1,11 +1,10 @@
-// app/container/[id].tsx
 import {
   useLocalSearchParams,
   useNavigation,
   useRouter,
   useFocusEffect,
 } from 'expo-router';
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -13,59 +12,96 @@ import {
   Alert,
   TouchableOpacity,
   useColorScheme,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
-import { getItemsByContainer, getContainerById, deleteContainer, deleteItem } from '@/components/database';
+import {
+  getItemsByContainer,
+  getContainerById,
+  type Container,
+  type Item,
+} from '@/components/database';
+import {
+  deleteContainerEverywhere,
+  deleteContainerItemEverywhere,
+} from '@/components/manage';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
 
 export default function ContainerDetail() {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
   const router = useRouter();
-  const [container, setContainer] = useState<any | null>(null);
-  const [items, setItems] = useState<any[]>([]);
+
+  const [container, setContainer] = useState<Container | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
+  const [isDeletingContainer, setIsDeletingContainer] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<number | null>(null);
 
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
+  const reloadItems = useCallback((containerId: number) => {
+    const data = getItemsByContainer(containerId);
+    setItems(data);
+  }, []);
+
   const handleDeleteContainer = () => {
-    if (!container) return;
+    if (!container || isDeletingContainer) return;
 
     Alert.alert(
       'Delete Container',
-      'Are you sure you want to delete this container?',
+      'This will permanently delete the container and its items from this device and the cloud.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            deleteContainer(container.id);
-            router.back();
+          onPress: async () => {
+            try {
+              setIsDeletingContainer(true);
+              await deleteContainerEverywhere(container);
+              router.back();
+            } catch (error: any) {
+              console.error('Delete container failed:', error);
+              Alert.alert(
+                'Delete failed',
+                error?.message ?? 'Could not delete this container.'
+              );
+              setIsDeletingContainer(false);
+            }
           },
         },
       ]
     );
   };
 
-  const handleDeleteItem = (itemId: number) => {
+  const handleDeleteItem = (item: Item) => {
+    if (!container || deletingItemId != null || isDeletingContainer) return;
+
     Alert.alert(
       'Delete Item',
-      'Are you sure you want to delete this item?',
+      'This will permanently delete the item from this device and the cloud.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            deleteItem(itemId);
-
-            if (container) {
-              const updatedItems = getItemsByContainer(container.id);
-              setItems(updatedItems);
+          onPress: async () => {
+            try {
+              setDeletingItemId(item.id);
+              await deleteContainerItemEverywhere(item);
+              reloadItems(container.id);
+            } catch (error: any) {
+              console.error('Delete item failed:', error);
+              Alert.alert(
+                'Delete failed',
+                error?.message ?? 'Could not delete this item.'
+              );
+            } finally {
+              setDeletingItemId(null);
             }
           },
         },
@@ -87,10 +123,8 @@ export default function ContainerDetail() {
 
       setContainer(foundContainer);
       navigation.setOptions({ title: foundContainer.name });
-
-      const data = getItemsByContainer(containerId);
-      setItems(data);
-    }, [id])
+      reloadItems(containerId);
+    }, [id, navigation, reloadItems])
   );
 
   return (
@@ -102,10 +136,7 @@ export default function ContainerDetail() {
         }}
         headerImage={
           container?.image_uri ? (
-            <Image
-              source={{ uri: container.image_uri }}
-              style={styles.headerImage}
-            />
+            <Image source={{ uri: container.image_uri }} style={styles.headerImage} />
           ) : (
             <View
               style={[
@@ -114,8 +145,8 @@ export default function ContainerDetail() {
               ]}
             >
               <Ionicons
-                name="folder-open-outline"
-                size={52}
+                name="cube-outline"
+                size={56}
                 color={theme.textMuted}
               />
             </View>
@@ -144,19 +175,32 @@ export default function ContainerDetail() {
           <TouchableOpacity
             style={[
               styles.deleteButton,
-              { backgroundColor: theme.danger },
+              {
+                backgroundColor: theme.danger,
+                opacity: isDeletingContainer ? 0.75 : 1,
+              },
             ]}
             onPress={handleDeleteContainer}
             activeOpacity={0.85}
+            disabled={isDeletingContainer}
           >
-            <Ionicons
-              name="trash-outline"
-              size={18}
-              color={theme.dangerText}
-              style={styles.deleteIcon}
-            />
+            {isDeletingContainer ? (
+              <ActivityIndicator
+                size="small"
+                color={theme.dangerText}
+                style={styles.deleteIcon}
+              />
+            ) : (
+              <Ionicons
+                name="trash-outline"
+                size={18}
+                color={theme.dangerText}
+                style={styles.deleteIcon}
+              />
+            )}
+
             <ThemedText style={[styles.deleteText, { color: theme.dangerText }]}>
-              Delete Container
+              {isDeletingContainer ? 'Deleting...' : 'Delete Container'}
             </ThemedText>
           </TouchableOpacity>
 
@@ -171,71 +215,97 @@ export default function ContainerDetail() {
               ]}
             >
               <Ionicons
-                name="cube-outline"
-                size={30}
+                name="albums-outline"
+                size={32}
                 color={theme.textMuted}
               />
               <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
-                No items in this container
+                No items yet
               </ThemedText>
-              <ThemedText style={[styles.emptySubtitle, { color: theme.textMuted }]}>
+              <ThemedText
+                style={[styles.emptySubtitle, { color: theme.textMuted }]}
+              >
                 Tap the add button to create your first item.
               </ThemedText>
             </View>
           ) : (
             <View style={styles.gallery}>
-              {items.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[
-                    styles.imageWrapper,
-                    {
-                      backgroundColor: theme.surface,
-                      borderColor: theme.border,
-                    },
-                  ]}
-                  activeOpacity={0.85}
-                  onPress={() => router.push(`/item/${item.id}`)}
-                  onLongPress={() => handleDeleteItem(item.id)}
-                >
-                  <Image
-                    source={{ uri: item.image_uri }}
+              {items.map((item) => {
+                const isDeletingThisItem = deletingItemId === item.id;
+
+                return (
+                  <TouchableOpacity
+                    key={item.id}
                     style={[
-                      styles.image,
-                      { backgroundColor: theme.surfaceAlt },
+                      styles.imageWrapper,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: theme.border,
+                        opacity: isDeletingThisItem ? 0.6 : 1,
+                      },
                     ]}
-                  />
-                  <View style={styles.itemFooter}>
-                    <ThemedText
-                      numberOfLines={1}
-                      style={[styles.itemName, { color: theme.text }]}
-                    >
-                      {item.name || 'Unnamed Item'}
-                    </ThemedText>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                    activeOpacity={0.85}
+                    onPress={() => router.push(`/item/${item.id}`)}
+                    onLongPress={() => handleDeleteItem(item)}
+                    disabled={isDeletingContainer || isDeletingThisItem}
+                  >
+                    {item.image_uri ? (
+                      <Image source={{ uri: item.image_uri }} style={styles.image} />
+                    ) : (
+                      <View
+                        style={[
+                          styles.image,
+                          styles.imagePlaceholder,
+                          { backgroundColor: theme.surfaceAlt },
+                        ]}
+                      >
+                        {isDeletingThisItem ? (
+                          <ActivityIndicator size="small" color={theme.tint} />
+                        ) : (
+                          <Ionicons
+                            name="image-outline"
+                            size={24}
+                            color={theme.textMuted}
+                          />
+                        )}
+                      </View>
+                    )}
+
+                    <View style={styles.itemFooter}>
+                      <ThemedText
+                        style={[styles.itemName, { color: theme.text }]}
+                        numberOfLines={1}
+                      >
+                        {item.name || 'Unnamed Item'}
+                      </ThemedText>
+
+                      <ThemedText
+                        style={[styles.itemHint, { color: theme.textMuted }]}
+                        numberOfLines={1}
+                      >
+                        {isDeletingThisItem ? 'Deleting...' : 'Tap to open • hold to delete'}
+                      </ThemedText>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
       </ParallaxScrollView>
 
       <TouchableOpacity
-        style={[
-          styles.fab,
-          {
-            backgroundColor: theme.primary,
-          },
-        ]}
-        activeOpacity={0.85}
+        style={[styles.fab, { backgroundColor: theme.tint }]}
+        activeOpacity={0.9}
         onPress={() =>
           router.push({
             pathname: '/item/create',
             params: { containerId: container?.id },
           })
         }
+        disabled={isDeletingContainer}
       >
-        <Ionicons name="add" size={30} color={theme.primaryText} />
+        <Ionicons name="add" size={30} color="#fff" />
       </TouchableOpacity>
     </View>
   );
@@ -308,13 +378,21 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
   },
+  imagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   itemFooter: {
     paddingHorizontal: 12,
     paddingVertical: 10,
+    gap: 4,
   },
   itemName: {
     fontSize: 15,
     fontWeight: '700',
+  },
+  itemHint: {
+    fontSize: 12,
   },
   emptyCard: {
     borderWidth: 1,
