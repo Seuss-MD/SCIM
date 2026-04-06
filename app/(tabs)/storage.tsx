@@ -177,11 +177,6 @@ export default function StorageScreen() {
               <ThemedText style={[styles.title, { color: theme.text }]}>
                 Storage
               </ThemedText>
-              <ThemedText style={[styles.subtitle, { color: theme.textMuted }]}>
-                Browse your containers and items. Tap to open. Long press to delete.
-                { '\n'}
-                Red label items are not in any container.
-              </ThemedText>
             </View>
 
             <View

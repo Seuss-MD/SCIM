@@ -15,7 +15,7 @@ import { Colors, Radius, Shadows, Spacing } from '@/constants/theme';
 
 export default function SyncScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
-  const [status, setStatus] = useState('Sync missing records between this device and the cloud.');
+  const [status, setStatus] = useState('Ready to sync');
   const [result, setResult] = useState<SyncResult | null>(null);
 
   const colorScheme = useColorScheme();
@@ -29,14 +29,22 @@ export default function SyncScreen() {
       const syncResult = await syncMissingData();
 
       setResult(syncResult);
-      setStatus('Sync complete.');
+      setStatus('Sync complete');
     } catch (error: any) {
       console.error('Sync failed:', error);
-      setStatus(`${error?.code ?? 'error'}: ${error?.message ?? 'Sync failed.'}`);
+      setStatus(error?.message ?? 'Sync failed');
     } finally {
       setIsSyncing(false);
     }
   }
+
+  const totalItemsSynced =
+    (result?.pushedItems ?? 0) + (result?.pulledItems ?? 0);
+
+  const totalContainersSynced =
+    (result?.pushedContainers ?? 0) + (result?.pulledContainers ?? 0);
+
+  const syncedContainerNames = result?.syncedContainerNames ?? [];
 
   return (
     <ThemedView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -49,15 +57,9 @@ export default function SyncScreen() {
           },
         ]}
       >
-        <View style={styles.headerBlock}>
-          <ThemedText style={[styles.title, { color: theme.text }]}>
-            Sync
-          </ThemedText>
-          <ThemedText style={[styles.subtitle, { color: theme.textMuted }]}>
-            Add what is missing on this device from the cloud, and add what is
-            missing in the cloud from this device.
-          </ThemedText>
-        </View>
+        <ThemedText style={[styles.title, { color: theme.text }]}>
+          Sync
+        </ThemedText>
 
         <TouchableOpacity
           onPress={handleSync}
@@ -80,106 +82,82 @@ export default function SyncScreen() {
             </>
           ) : (
             <>
-              <Ionicons
-                name="sync-circle"
-                size={20}
-                color="#fff"
-                style={styles.buttonIcon}
-              />
+              <Ionicons name="sync" size={20} color="#fff" style={styles.buttonIcon} />
               <ThemedText style={[styles.syncButtonText, { color: '#fff' }]}>
-                Sync Now
+                Sync
               </ThemedText>
             </>
           )}
         </TouchableOpacity>
 
+        <ThemedText style={[styles.statusText, { color: theme.textMuted }]}>
+          {status}
+        </ThemedText>
+
+        <View style={styles.statsRow}>
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.background,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={[styles.statNumber, { color: theme.text }]}>
+              {totalItemsSynced}
+            </ThemedText>
+            <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
+              Items synced
+            </ThemedText>
+          </View>
+
+          <View
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: theme.background,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={[styles.statNumber, { color: theme.text }]}>
+              {totalContainersSynced}
+            </ThemedText>
+            <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
+              Containers synced
+            </ThemedText>
+          </View>
+        </View>
+
         <View
           style={[
-            styles.statusBox,
+            styles.listBox,
             {
               backgroundColor: theme.background,
               borderColor: theme.border,
             },
           ]}
         >
-          <ThemedText style={[styles.statusText, { color: theme.text }]}>
-            {status}
+          <ThemedText style={[styles.listTitle, { color: theme.text }]}>
+            Synced containers
           </ThemedText>
+
+          {syncedContainerNames.length > 0 ? (
+            syncedContainerNames.map((name, index) => (
+              <ThemedText
+                key={`${name}-${index}`}
+                style={[styles.listItem, { color: theme.textMuted }]}
+              >
+                • {name}
+              </ThemedText>
+            ))
+          ) : (
+            <ThemedText style={[styles.listItem, { color: theme.textMuted }]}>
+              No containers synced yet
+            </ThemedText>
+          )}
         </View>
-
-        <View style={styles.statsGrid}>
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.background,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText style={[styles.statNumber, { color: theme.text }]}>
-              {result?.pushedContainers ?? 0}
-            </ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Containers pushed
-            </ThemedText>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.background,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText style={[styles.statNumber, { color: theme.text }]}>
-              {result?.pushedItems ?? 0}
-            </ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Items pushed
-            </ThemedText>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.background,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText style={[styles.statNumber, { color: theme.text }]}>
-              {result?.pulledContainers ?? 0}
-            </ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Containers pulled
-            </ThemedText>
-          </View>
-
-          <View
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: theme.background,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <ThemedText style={[styles.statNumber, { color: theme.text }]}>
-              {result?.pulledItems ?? 0}
-            </ThemedText>
-            <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Items pulled
-            </ThemedText>
-          </View>
-        </View>
-
-        <ThemedText style={[styles.note, { color: theme.textMuted }]}>
-          This sync only handles missing records. It does not merge edits or deletes yet.
-        </ThemedText>
       </View>
     </ThemedView>
   );
@@ -197,17 +175,9 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
     ...Shadows.card,
   },
-  headerBlock: {
-    gap: 6,
-  },
   title: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '800',
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 15,
-    lineHeight: 22,
   },
   syncButton: {
     minHeight: 52,
@@ -223,26 +193,19 @@ const styles = StyleSheet.create({
   buttonIcon: {
     marginRight: 8,
   },
-  statusBox: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-  },
   statusText: {
-    fontSize: 15,
-    lineHeight: 21,
+    fontSize: 14,
   },
-  statsGrid: {
+  statsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: Spacing.md,
   },
   statCard: {
-    width: '47%',
+    flex: 1,
     borderWidth: 1,
     borderRadius: Radius.md,
     padding: Spacing.md,
-    minHeight: 94,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   statNumber: {
@@ -253,8 +216,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  note: {
-    fontSize: 13,
-    lineHeight: 19,
+  listBox: {
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+  },
+  listTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  listItem: {
+    fontSize: 14,
+    marginBottom: 4,
   },
 });

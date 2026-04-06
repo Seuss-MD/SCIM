@@ -54,13 +54,13 @@ export default function RootLayout() {
   useEffect(() => {
     notificationListener.current =
       Notifications.addNotificationReceivedListener((notification: Notification) => {
-        console.log('Notification received:', notification);
+        //console.log('Notification received:', notification);
       });
 
     responseListener.current =
       Notifications.addNotificationResponseReceivedListener(
         (response: NotificationResponse) => {
-          console.log('Notification tapped:', response);
+          //console.log('Notification tapped:', response);
 
           const data = response.notification.request.content.data;
           const screen = typeof data?.screen === 'string' ? data.screen : null;

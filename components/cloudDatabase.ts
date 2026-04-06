@@ -53,6 +53,7 @@ export type SyncResult = {
   pushedItems: number;
   pulledContainers: number;
   pulledItems: number;
+  syncedContainerNames: string[];
 };
 
 function parseEmbeddingString(value: string | null): number[] | null {
@@ -75,12 +76,14 @@ function normalizeTags(value: unknown): string[] {
 }
 
 function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 50) || 'untitled';
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50) || 'untitled'
+  );
 }
 
 function buildWorkspaceLabel(name: string) {
@@ -94,6 +97,7 @@ function buildContainerImagePath(
   containerName: string
 ) {
   const safeContainerName = slugify(containerName);
+
   return `workspaces/${workspaceId}/${workspaceLabel}/containers/${safeContainerName}--${containerId}/container-photo/${safeContainerName}.jpg`;
 }
 
@@ -112,14 +116,17 @@ function buildItemImagePath(
   }
 
   const safeContainerName = slugify(containerName);
+
   return `workspaces/${workspaceId}/${workspaceLabel}/containers/${safeContainerName}--${containerId}/items/${safeItemName}--${itemId}.jpg`;
 }
 
 async function requireUid(): Promise<string> {
   const uid = auth.currentUser?.uid;
+
   if (!uid) {
     throw new Error('You must be signed in to sync.');
   }
+
   return uid;
 }
 
@@ -384,6 +391,7 @@ export async function syncMissingData(
     pushedItems: 0,
     pulledContainers: 0,
     pulledItems: 0,
+    syncedContainerNames: [],
   };
 
   const localContainers = getAllContainers();
@@ -410,6 +418,7 @@ export async function syncMissingData(
 
     setContainerCloudSync(container.id, cloud.id, auth.currentUser?.uid ?? null);
     result.pushedContainers += 1;
+    result.syncedContainerNames.push(container.name);
   }
 
   const localContainersAfterPush = getAllContainers();
@@ -468,9 +477,11 @@ export async function syncMissingData(
     if (getContainerByCloudId(cloudDoc.id)) continue;
 
     const data = cloudDoc.data();
+    const pulledContainerName =
+      typeof data.name === 'string' ? data.name : 'Untitled container';
 
     insertContainer(
-      typeof data.name === 'string' ? data.name : 'Untitled container',
+      pulledContainerName,
       typeof data.image_uri === 'string' ? data.image_uri : null,
       normalizeEmbedding(data.embedding),
       {
@@ -481,6 +492,7 @@ export async function syncMissingData(
     );
 
     result.pulledContainers += 1;
+    result.syncedContainerNames.push(pulledContainerName);
   }
 
   const localContainersAfterPull = getAllContainers();
@@ -498,7 +510,6 @@ export async function syncMissingData(
     if (getItemByCloudId(cloudDoc.id)) continue;
 
     const data = cloudDoc.data();
-
     const containerCloudId =
       typeof data.container_id === 'string' ? data.container_id : null;
 
@@ -524,6 +535,8 @@ export async function syncMissingData(
 
     result.pulledItems += 1;
   }
+
+  result.syncedContainerNames = [...new Set(result.syncedContainerNames)];
 
   return result;
 }
