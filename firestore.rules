@@ -6,27 +6,191 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function me() {
+      return request.auth.uid;
+    }
+
+    function groupMemberPath(groupId, uid) {
+      return /databases/$(database)/documents/groups/$(groupId)/members/$(uid);
+    }
+
+    function isGroupMember(groupId) {
+      return signedIn() && exists(groupMemberPath(groupId, me()));
+    }
+
+    function groupRole(groupId) {
+      return get(groupMemberPath(groupId, me())).data.role;
+    }
+
+    function isGroupOwner(groupId) {
+      return isGroupMember(groupId) && groupRole(groupId) == 'owner';
+    }
+
+    function isGroupAdmin(groupId) {
+      return isGroupMember(groupId) && (
+        groupRole(groupId) == 'owner' ||
+        groupRole(groupId) == 'admin'
+      );
+    }
+
+    function validGroupName(name) {
+      return name is string && name.size() >= 1 && name.size() <= 80;
+    }
+
+    function validInviteCode(code) {
+      return code is string && code.size() >= 12 && code.size() <= 24;
+    }
+
+    function isPersonalWorkspace(workspaceId) {
+      return signedIn() && workspaceId == me();
+    }
+
+    function isGroupWorkspaceMember(workspaceId) {
+      return isGroupMember(workspaceId);
+    }
+
+    function isGroupWorkspaceOwner(workspaceId) {
+      return isGroupOwner(workspaceId);
+    }
+
+    function canReadWorkspace(workspaceId) {
+      return isPersonalWorkspace(workspaceId) || isGroupWorkspaceMember(workspaceId);
+    }
+
+    function canEditWorkspace(workspaceId) {
+      return isPersonalWorkspace(workspaceId) || isGroupWorkspaceMember(workspaceId);
+    }
+
+    function canDeleteWorkspaceData(workspaceId) {
+      return isPersonalWorkspace(workspaceId) || isGroupWorkspaceOwner(workspaceId);
+    }
+
     match /users/{userId} {
-      allow read, write: if signedIn() && request.auth.uid == userId;
+      allow read, write: if signedIn() && me() == userId;
     }
 
     match /groups/{groupId} {
-      allow read, write: if signedIn();
+      allow get: if isGroupMember(groupId) || (signedIn() && resource.data.joinEnabled == true);
+      allow list: if false;
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'ownerId',
+          'name',
+          'inviteCode',
+          'joinEnabled',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.ownerId == me()
+        && validGroupName(request.resource.data.name)
+        && validInviteCode(request.resource.data.inviteCode)
+        && request.resource.data.inviteCode == groupId
+        && request.resource.data.joinEnabled is bool
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow update: if isGroupAdmin(groupId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name',
+          'joinEnabled',
+          'updatedAt'
+        ])
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.inviteCode == resource.data.inviteCode
+        && request.resource.data.createdAt == resource.data.createdAt
+        && validGroupName(request.resource.data.name)
+        && request.resource.data.joinEnabled is bool
+        && request.resource.data.updatedAt is timestamp;
+
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow read: if isGroupMember(groupId);
+
+        allow create: if signedIn() && (
+          (
+            memberId == me()
+            && !exists(/databases/$(database)/documents/groups/$(groupId)/members/$(me()))
+            && get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId == me()
+            && request.resource.data.keys().hasOnly(['uid', 'role', 'createdAt'])
+            && request.resource.data.uid == me()
+            && request.resource.data.role == 'owner'
+            && request.resource.data.createdAt is timestamp
+          )
+          ||
+          (
+            memberId == me()
+            && !exists(/databases/$(database)/documents/groups/$(groupId)/members/$(me()))
+            && get(/databases/$(database)/documents/groups/$(groupId)).data.joinEnabled == true
+            && request.resource.data.keys().hasOnly(['uid', 'role', 'createdAt'])
+            && request.resource.data.uid == me()
+            && request.resource.data.role == 'member'
+            && request.resource.data.createdAt is timestamp
+          )
+          ||
+          (
+            isGroupOwner(groupId)
+            && !exists(/databases/$(database)/documents/groups/$(groupId)/members/$(memberId))
+            && request.resource.data.keys().hasOnly(['uid', 'role', 'createdAt'])
+            && request.resource.data.uid == memberId
+            && request.resource.data.createdAt is timestamp
+            && (
+              request.resource.data.role == 'admin' ||
+              request.resource.data.role == 'member'
+            )
+          )
+        );
+
+        allow update: if signedIn()
+          && isGroupOwner(groupId)
+          && memberId != me()
+          && resource.data.role != 'owner'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.createdAt == resource.data.createdAt
+          && (
+            request.resource.data.role == 'admin' ||
+            request.resource.data.role == 'member'
+          );
+
+        allow delete: if signedIn() && (
+          (memberId == me() && resource.data.role != 'owner')
+          ||
+          (isGroupOwner(groupId) && resource.data.role != 'owner')
+          ||
+          (
+            isGroupAdmin(groupId)
+            && !isGroupOwner(groupId)
+            && resource.data.role == 'member'
+          )
+        );
+      }
     }
 
     match /workspaces/{workspaceId} {
-      allow read, write: if signedIn() && request.auth.uid == workspaceId;
+      allow get: if canReadWorkspace(workspaceId);
+      allow list: if false;
+
+      allow create: if isPersonalWorkspace(workspaceId) || isGroupWorkspaceOwner(workspaceId);
+      allow update: if isPersonalWorkspace(workspaceId) || isGroupWorkspaceOwner(workspaceId);
+      allow delete: if false;
 
       match /members/{memberId} {
-        allow read, write: if signedIn() && request.auth.uid == workspaceId;
+        allow read: if canReadWorkspace(workspaceId);
+        allow create, update, delete: if isPersonalWorkspace(workspaceId) || isGroupWorkspaceOwner(workspaceId);
       }
 
       match /containers/{containerId} {
-        allow read, write: if signedIn() && request.auth.uid == workspaceId;
+        allow read: if canReadWorkspace(workspaceId);
+        allow create, update: if canEditWorkspace(workspaceId);
+        allow delete: if canDeleteWorkspaceData(workspaceId);
       }
 
       match /items/{itemId} {
-        allow read, write: if signedIn() && request.auth.uid == workspaceId;
+        allow read: if canReadWorkspace(workspaceId);
+        allow create, update: if canEditWorkspace(workspaceId);
+        allow delete: if canDeleteWorkspaceData(workspaceId);
       }
     }
   }

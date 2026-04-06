@@ -15,7 +15,6 @@ import { Colors, Radius, Shadows, Spacing } from '@/constants/theme';
 
 export default function SyncScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
-  const [status, setStatus] = useState('Ready to sync');
   const [result, setResult] = useState<SyncResult | null>(null);
 
   const colorScheme = useColorScheme();
@@ -24,15 +23,11 @@ export default function SyncScreen() {
   async function handleSync() {
     try {
       setIsSyncing(true);
-      setStatus('Syncing...');
 
       const syncResult = await syncMissingData();
-
       setResult(syncResult);
-      setStatus('Sync complete');
     } catch (error: any) {
       console.error('Sync failed:', error);
-      setStatus(error?.message ?? 'Sync failed');
     } finally {
       setIsSyncing(false);
     }
@@ -43,8 +38,6 @@ export default function SyncScreen() {
 
   const totalContainersSynced =
     (result?.pushedContainers ?? 0) + (result?.pulledContainers ?? 0);
-
-  const syncedContainerNames = result?.syncedContainerNames ?? [];
 
   return (
     <ThemedView style={[styles.screen, { backgroundColor: theme.background }]}>
@@ -90,7 +83,6 @@ export default function SyncScreen() {
           )}
         </TouchableOpacity>
 
-
         <View style={styles.statsRow}>
           <View
             style={[
@@ -105,7 +97,7 @@ export default function SyncScreen() {
               {totalItemsSynced}
             </ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Items 
+              Items
             </ThemedText>
           </View>
 
@@ -122,12 +114,10 @@ export default function SyncScreen() {
               {totalContainersSynced}
             </ThemedText>
             <ThemedText style={[styles.statLabel, { color: theme.textMuted }]}>
-              Containers 
+              Containers
             </ThemedText>
           </View>
         </View>
-
-
       </View>
     </ThemedView>
   );
@@ -137,8 +127,12 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     padding: Spacing.xl,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   card: {
+    width: '100%',
+    maxWidth: 500,
     borderRadius: Radius.lg,
     borderWidth: 1,
     padding: Spacing.xl,
@@ -148,6 +142,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
+    textAlign: 'center',
   },
   syncButton: {
     minHeight: 52,
@@ -159,12 +154,10 @@ const styles = StyleSheet.create({
   syncButtonText: {
     fontWeight: '700',
     fontSize: 16,
+    textAlign: 'center',
   },
   buttonIcon: {
     marginRight: 8,
-  },
-  statusText: {
-    fontSize: 14,
   },
   statsRow: {
     flexDirection: 'row',
@@ -181,23 +174,11 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 28,
     fontWeight: '800',
+    textAlign: 'center',
   },
   statLabel: {
     fontSize: 14,
     marginTop: 4,
-  },
-  listBox: {
-    borderWidth: 1,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-  },
-  listTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  listItem: {
-    fontSize: 14,
-    marginBottom: 4,
+    textAlign: 'center',
   },
 });

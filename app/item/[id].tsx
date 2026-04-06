@@ -1,21 +1,20 @@
-// app/item/[id].tsx
 import {
+  useFocusEffect,
   useLocalSearchParams,
   useNavigation,
   useRouter,
-  useFocusEffect,
 } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  StyleSheet,
-  Image,
+  ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
+  Image,
+  StyleSheet,
   TouchableOpacity,
   View,
   useColorScheme,
-  ActivityIndicator,
-  Animated,
-  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -23,13 +22,16 @@ import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import {
-  getItemById,
-  deleteItem,
   getContainerById,
-  type Item,
+  getItemById,
   type Container,
+  type Item,
 } from '@/components/database';
-import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
+import {
+  canCurrentUserPermanentlyDeleteSyncedItems,
+  permanentlyDeleteItemEverywhere,
+} from '@/components/itemDeletion';
+import { Colors, Radius, Shadows, Spacing } from '@/constants/theme';
 
 function AiLoadingBar({
   trackColor,
@@ -74,18 +76,18 @@ function AiLoadingBar({
       onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
       style={[styles.progressTrack, { backgroundColor: trackColor }]}
     >
-      {trackWidth > 0 && (
+      {trackWidth > 0 ? (
         <Animated.View
           style={[
             styles.progressFill,
             {
-              backgroundColor: fillColor,
               width: trackWidth * 0.35,
+              backgroundColor: fillColor,
               transform: [{ translateX }],
             },
           ]}
         />
-      )}
+      ) : null}
     </View>
   );
 }
@@ -97,6 +99,9 @@ export default function ItemDetail() {
 
   const [item, setItem] = useState<Item | null>(null);
   const [container, setContainer] = useState<Container | null>(null);
+  const [checkingDeletePermission, setCheckingDeletePermission] = useState(false);
+  const [canDeleteSyncedItems, setCanDeleteSyncedItems] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   const colorScheme = useColorScheme();
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
@@ -105,6 +110,12 @@ export default function ItemDetail() {
     if (!id) return;
 
     const itemId = Number(id);
+
+    if (!Number.isFinite(itemId)) {
+      navigation.setOptions({ title: 'Item Not Found' });
+      return;
+    }
+
     const foundItem = getItemById(itemId);
 
     if (!foundItem) {
@@ -132,10 +143,12 @@ export default function ItemDetail() {
     if (!item?.id) return;
 
     const needsAiDescription = !item.description?.trim();
+
     if (!needsAiDescription) return;
 
     const interval = setInterval(() => {
       const refreshed = getItemById(item.id);
+
       if (!refreshed) return;
 
       setItem(refreshed);
@@ -152,20 +165,79 @@ export default function ItemDetail() {
     return () => clearInterval(interval);
   }, [item?.id, item?.description]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDeletePermission() {
+      if (!item?.cloud_id) {
+        if (isMounted) {
+          setCanDeleteSyncedItems(true);
+          setCheckingDeletePermission(false);
+        }
+        return;
+      }
+
+      try {
+        setCheckingDeletePermission(true);
+        const allowed = await canCurrentUserPermanentlyDeleteSyncedItems();
+
+        if (isMounted) {
+          setCanDeleteSyncedItems(allowed);
+        }
+      } catch {
+        if (isMounted) {
+          setCanDeleteSyncedItems(false);
+        }
+      } finally {
+        if (isMounted) {
+          setCheckingDeletePermission(false);
+        }
+      }
+    }
+
+    loadDeletePermission();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item?.cloud_id]);
+
+  const canDeleteThisItem = !item?.cloud_id || canDeleteSyncedItems;
+
   const handleDelete = () => {
     if (!item) return;
 
+    if (item.cloud_id && !canDeleteThisItem) {
+      Alert.alert(
+        'Owner only',
+        'Only the group owner can permanently delete synced items from the cloud and this device.'
+      );
+      return;
+    }
+
     Alert.alert(
       'Delete Item',
-      'Are you sure you want to delete this item?',
+      item.cloud_id
+        ? 'This will permanently delete the item from the cloud and this device.'
+        : 'Are you sure you want to delete this item from this device?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            deleteItem(item.id);
-            router.back();
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              await permanentlyDeleteItemEverywhere(item);
+              router.back();
+            } catch (error: any) {
+              Alert.alert(
+                'Delete failed',
+                error?.message ?? 'Could not delete this item.'
+              );
+            } finally {
+              setDeleting(false);
+            }
           },
         },
       ]
@@ -205,7 +277,7 @@ export default function ItemDetail() {
           { backgroundColor: theme.background },
         ]}
       >
-        {item && (
+        {item ? (
           <>
             <ThemedText style={[styles.title, { color: theme.text }]}>
               {item.name}
@@ -303,6 +375,7 @@ export default function ItemDetail() {
                     <ThemedText style={[styles.linkText, { color: theme.text }]}>
                       {container.name}
                     </ThemedText>
+
                     <ThemedText
                       style={[styles.containerHint, { color: theme.textMuted }]}
                     >
@@ -352,10 +425,17 @@ export default function ItemDetail() {
             <TouchableOpacity
               style={[
                 styles.deleteButton,
-                { backgroundColor: theme.danger },
+                {
+                  backgroundColor: theme.danger,
+                  opacity:
+                    deleting || checkingDeletePermission || !canDeleteThisItem
+                      ? 0.65
+                      : 1,
+                },
               ]}
               onPress={handleDelete}
               activeOpacity={0.85}
+              disabled={deleting || checkingDeletePermission}
             >
               <Ionicons
                 name="trash-outline"
@@ -366,10 +446,36 @@ export default function ItemDetail() {
               <ThemedText
                 style={[styles.buttonText, { color: theme.dangerText }]}
               >
-                Delete Item
+                {deleting
+                  ? 'Deleting...'
+                  : checkingDeletePermission
+                  ? 'Checking...'
+                  : 'Delete Item'}
               </ThemedText>
             </TouchableOpacity>
+
+            {item.cloud_id && !canDeleteThisItem ? (
+              <ThemedText
+                style={[styles.permissionHint, { color: theme.textMuted }]}
+              >
+                Only the group owner can permanently delete synced items.
+              </ThemedText>
+            ) : null}
           </>
+        ) : (
+          <View
+            style={[
+              styles.infoCard,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText style={[styles.description, { color: theme.textMuted }]}>
+              Item not found.
+            </ThemedText>
+          </View>
         )}
       </ThemedView>
     </ParallaxScrollView>
@@ -494,5 +600,10 @@ const styles = StyleSheet.create({
   buttonText: {
     fontWeight: '700',
     fontSize: 16,
+  },
+  permissionHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: -2,
   },
 });
