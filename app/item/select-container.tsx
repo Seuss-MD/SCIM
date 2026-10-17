@@ -1,4 +1,3 @@
-// app/item/select-container.tsx
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {

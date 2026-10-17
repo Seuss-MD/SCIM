@@ -9,6 +9,7 @@ import {
   View,
   TextInput,
   useColorScheme,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -94,13 +95,12 @@ export default function EditItemPage() {
       selectedContainerId
     );
 
-    router.replace({
-      pathname: '/item/[id]',
-      params: { id: String(item.id) },
-    });
+    Keyboard.dismiss();
+    router.back();
   };
 
   const handleCancel = () => {
+    Keyboard.dismiss();
     router.back();
   };
 
@@ -224,9 +224,6 @@ export default function EditItemPage() {
                   <View style={styles.containerPreviewText}>
                     <ThemedText style={[styles.containerName, { color: theme.text }]}>
                       {selectedContainer.name}
-                    </ThemedText>
-                    <ThemedText style={[styles.containerHint, { color: theme.textMuted }]}>
-                      Tap to choose a different container
                     </ThemedText>
                   </View>
 

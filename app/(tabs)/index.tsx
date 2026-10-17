@@ -18,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import ScimCamera from '@/components/ScimCam';
 import {
+  getContainerById,
   searchItemsByEmbedding,
   type ItemSearchResult,
 } from '@/components/database';
@@ -110,6 +111,15 @@ export default function HomeScreen() {
     }
   }
 
+  function getItemLocation(item: ItemSearchResult) {
+    if (typeof item.container_id === 'number') {
+      const container = getContainerById(item.container_id);
+      return container?.name ? container.name : 'Unknown container';
+    }
+
+    return 'No container';
+  }
+
   function renderItemResult({ item }: { item: ItemSearchResult }) {
     return (
       <TouchableOpacity
@@ -146,7 +156,7 @@ export default function HomeScreen() {
             {item.name || 'Unnamed Item'}
           </ThemedText>
           <ThemedText style={[styles.cardMeta, { color: theme.textMuted }]}>
-            Similarity: {(item.similarity * 100).toFixed(1)}%
+            Location: {getItemLocation(item)}
           </ThemedText>
         </View>
       </TouchableOpacity>
@@ -169,7 +179,7 @@ export default function HomeScreen() {
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.hero}>
-        <ThemedText style={[styles.logo, { color: theme.tint }]}>SCIM</ThemedText>
+        <ThemedText style={[styles.logo, { color: theme.text }]}>SCIM</ThemedText>
 
         {inputMode === 'text' ? (
           <View

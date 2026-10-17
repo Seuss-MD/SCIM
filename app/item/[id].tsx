@@ -314,11 +314,6 @@ export default function ItemDetail() {
                     <ThemedText style={[styles.linkText, { color: theme.text }]}>
                       {container.name}
                     </ThemedText>
-                    <ThemedText
-                      style={[styles.containerHint, { color: theme.textMuted }]}
-                    >
-                      Tap to open container
-                    </ThemedText>
                   </View>
 
                   <Ionicons
@@ -360,7 +355,7 @@ export default function ItemDetail() {
               <ThemedText
                 style={[styles.buttonText, { color: theme.primaryText }]}
               >
-                Edit Item
+                Edit
               </ThemedText>
             </TouchableOpacity>
 
