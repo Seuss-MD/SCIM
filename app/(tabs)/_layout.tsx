@@ -6,16 +6,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { debugPrintSchema, initDatabase, resetDatabase } from '@/components/database';
+import { initDatabase } from '@/components/database';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme() ?? 'light';
   const theme = Colors[colorScheme];
 
   useEffect(() => {
-    //resetDatabase();
     initDatabase();
-    //debugPrintSchema();
   }, []);
 
   return (
