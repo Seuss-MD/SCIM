@@ -1,5 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
+import { rankBySimilarity, type Ranked } from './vectorSearch';
+
 const db = SQLite.openDatabaseSync('scim.db');
 export function resetDatabase() {
   db.execSync(`
@@ -41,8 +43,8 @@ export type Item = {
 function safeAlter(sql: string) {
   try {
     db.execSync(sql);
-  } catch (error) {
-    //console.log('ALTER failed:', sql, error);
+  } catch {
+    // Column already exists; ALTER TABLE ADD COLUMN is not idempotent in SQLite.
   }
 }
 
@@ -331,17 +333,6 @@ export function deleteContainer(id: number) {
   db.runSync(`DELETE FROM containers WHERE id = ?`, [id]);
 }
 
-function parseEmbedding(value: string | null): number[] | null {
-  if (!value) return null;
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 export function parseTags(value: string | null): string[] {
   if (!value) return [];
 
@@ -353,28 +344,7 @@ export function parseTags(value: string | null): string[] {
   }
 }
 
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return -1;
-
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  if (denom === 0) return -1;
-
-  return dot / denom;
-}
-
-export type ItemSearchResult = Item & {
-  similarity: number;
-};
+export type ItemSearchResult = Ranked<Item>;
 
 export function searchItemsByEmbedding(
   queryEmbedding: number[],
@@ -386,23 +356,10 @@ export function searchItemsByEmbedding(
       ? (db.getAllSync(`SELECT * FROM items WHERE container_id = ?`, [containerId]) as Item[])
       : (db.getAllSync(`SELECT * FROM items`) as Item[]);
 
-  return items
-    .map((item) => {
-      const itemEmbedding = parseEmbedding(item.embedding);
-      const similarity = itemEmbedding
-        ? cosineSimilarity(queryEmbedding, itemEmbedding)
-        : -1;
-
-      return { ...item, similarity };
-    })
-    .filter((item) => item.similarity >= 0)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit);
+  return rankBySimilarity(items, queryEmbedding, (item) => item.embedding, { limit });
 }
 
-export type ContainerSearchResult = Container & {
-  similarity: number;
-};
+export type ContainerSearchResult = Ranked<Container>;
 
 export function searchContainersByEmbedding(
   queryEmbedding: number[],
@@ -410,24 +367,5 @@ export function searchContainersByEmbedding(
 ): ContainerSearchResult[] {
   const containers = db.getAllSync(`SELECT * FROM containers`) as Container[];
 
-  return containers
-    .map((container) => {
-      const containerEmbedding = parseEmbedding(container.embedding);
-      const similarity = containerEmbedding
-        ? cosineSimilarity(queryEmbedding, containerEmbedding)
-        : -1;
-
-      return { ...container, similarity };
-    })
-    .filter((container) => container.similarity >= 0)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit);
-}
-
-export function debugPrintSchema() {
-  const containerCols = db.getAllSync(`PRAGMA table_info(containers)`);
-  const itemCols = db.getAllSync(`PRAGMA table_info(items)`);
-
-  console.log('containers schema:', JSON.stringify(containerCols, null, 2));
-  console.log('items schema:', JSON.stringify(itemCols, null, 2));
+  return rankBySimilarity(containers, queryEmbedding, (c) => c.embedding, { limit });
 }
