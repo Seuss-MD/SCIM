@@ -32,7 +32,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebase';
 import { useAuthUser } from '@/components/authGate';
 import { Colors, Radius, Spacing, Shadows } from '@/constants/theme';
-import { registerForPushNotificationsAsync } from '@/functions/lib/notifications';
+import { registerForPushNotificationsAsync } from '@/components/notifications';
 
 export default function ProfileScreen() {
   const { user, loading } = useAuthUser();

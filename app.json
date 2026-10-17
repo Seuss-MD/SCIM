@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "cam-app",
+    "name": "SCIM",
     "slug": "cam-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -43,9 +43,15 @@
         }
       ],
       [
-        "react-native-vision-camera",
+        "expo-camera",
         {
-          "cameraPermissionText": "SCIM needs access to your Camera."
+          "cameraPermission": "SCIM uses the camera to photograph items and containers so you can find them later."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SCIM lets you pick a photo to search your inventory by image."
         }
       ],
       "expo-sqlite",

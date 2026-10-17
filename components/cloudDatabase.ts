@@ -13,6 +13,7 @@ import {
 } from 'firebase/storage';
 
 import { auth, db, storage } from '../firebase';
+import { parseEmbedding } from './vectorSearch';
 import {
   getAllContainers,
   getAllItems,
@@ -55,17 +56,6 @@ export type SyncResult = {
   pulledItems: number;
   syncedContainerNames: string[];
 };
-
-function parseEmbeddingString(value: string | null): number[] | null {
-  if (!value) return null;
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 function normalizeEmbedding(value: unknown): number[] | null {
   return Array.isArray(value) ? (value as number[]) : null;
@@ -413,7 +403,7 @@ export async function syncMissingData(
         container.image_uri?.startsWith('https://')
           ? null
           : container.image_uri,
-      embedding: parseEmbeddingString(container.embedding),
+      embedding: parseEmbedding(container.embedding),
     });
 
     setContainerCloudSync(container.id, cloud.id, auth.currentUser?.uid ?? null);
@@ -456,7 +446,7 @@ export async function syncMissingData(
           : item.image_uri,
       containerId: containerCloudId,
       containerName,
-      embedding: parseEmbeddingString(item.embedding),
+      embedding: parseEmbedding(item.embedding),
       tags: parseTags(item.tags),
     });
 
