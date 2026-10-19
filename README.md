@@ -12,6 +12,46 @@ The current project focuses on making home or personal inventory easier to captu
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/image-search.jpg" width="180" alt="Image search results"><br>
+      <sub><b>Search by photo</b><br>Snap an item to find similar saved items and where they're stored</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/storage.jpg" width="180" alt="Storage tab with containers"><br>
+      <sub><b>Storage</b><br>Containers, each with its own photo</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/container.jpg" width="180" alt="Container detail screen"><br>
+      <sub><b>Container</b><br>Everything stored inside it</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/item-detail.jpg" width="180" alt="Item detail with AI description"><br>
+      <sub><b>Item details</b><br>AI-generated description and linked container</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/create-item.jpg" width="180" alt="Create item screen"><br>
+      <sub><b>Add an item</b><br>Name it and take a photo</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/sync.jpg" width="180" alt="Sync screen"><br>
+      <sub><b>Sync</b><br>Push and pull inventory with Firebase</sub>
+    </td>
+    <td align="center" valign="top">
+      <img src="docs/screenshots/profile.jpg" width="180" alt="Profile settings screen"><br>
+      <sub><b>Profile</b><br>Photo, email and password settings</sub>
+    </td>
+    <td></td>
+  </tr>
+</table>
+
+---
+
 ## What the app does
 
 ### Core features
